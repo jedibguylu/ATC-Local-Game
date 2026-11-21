@@ -755,7 +755,7 @@ const ATC = {};
     takeoff: 'Takeoff roll', climb: 'Departure', pattern: 'Pattern', inbound: 'Inbound', final: 'Final',
     rollout: 'Rollout', exiting: 'Exiting', stopped: 'Holding', missed: 'Missed approach', parkedArr: 'At gate',
   };
-  const KEYWORDS = new Set(['CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
+  const KEYWORDS = new Set(['CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
     'EXIT', 'EXP', 'ELD', 'ERD', 'ELB', 'ERB', 'SI', 'LCT', 'RCT', 'MLT', 'MRT', 'ED', 'TB', 'SA', 'L360', 'R360', 'FOLLOW', 'FLW', 'TFC', 'CWT', 'HO', 'CD', 'OC', 'RH', 'EXP']);
 
   A.Sim = class {
@@ -1222,7 +1222,13 @@ const ATC = {};
         if (d < 4 && ac.spd < 0.5) this.atStop(ac, st);
       }
       const dEnd = p.end - s;
-      vT = Math.min(vT, Math.sqrt(2 * decel * Math.max(0, dEnd)));
+      const rollingTO = ac.phase === 'lineup' && ac.rollTO && ac.clr.to;
+      if (!rollingTO) vT = Math.min(vT, Math.sqrt(2 * decel * Math.max(0, dEnd)));
+      // immediate takeoff while still taxiing: swing straight onto the runway instead of stopping at the hold line
+      if (ac.phase === 'taxi' && ac.rollTO && ac.clr.to && ac.route && ac.route.dest && ac.route.dest.type === 'rwy' && dEnd < 450
+        && !p.stops.some(t => t.kind === 'rwy' && !t.cleared && t.s > s - 5)) {
+        ac.node = ac.route.nodes[ac.route.nodes.length - 1]; this.startLineup(ac, true); return;
+      }
       if (ac.holdPos) vT = 0;
       if (roll) {
         const vp = Math.sqrt(p.vx * p.vx + 2 * p.planA * Math.max(0, p.sExit - s));
@@ -1251,7 +1257,7 @@ const ATC = {};
       }
       if (ac.expedite && !this.onRunway(ac) && ac.wasOnRwy) { ac.expedite = false; }
       ac.wasOnRwy = this.onRunway(ac);
-      if (dEnd < 1 && ac.spd < 0.3) this.pathEnd(ac);
+      if (dEnd < 1 && (ac.spd < 0.3 || rollingTO)) this.pathEnd(ac);
     }
     atStop(ac, st) {
       if (st.kind === 'rwy') {
@@ -1265,7 +1271,8 @@ const ATC = {};
       return best;
     }
     pathEnd(ac) {
-      const ph = ac.phase; ac.spd = 0;
+      const ph = ac.phase;
+      if (!(ph === 'lineup' && ac.rollTO && ac.clr.to)) ac.spd = 0;
       if (ph === 'push') {
         ac.phase = 'stopped'; ac.node = ac.path.toNode; ac.path = null;
         for (const g of this.ap.gates) if (g.occ === ac.id) g.occ = null;
@@ -1294,7 +1301,7 @@ const ATC = {};
         } else ac.phase = 'stopped';
       } else if (ph === 'lineup') {
         ac.path = null; ac.hdg = this.H;
-        if (ac.clr.to) { ac.phase = 'takeoff'; ac.spool = ac.spd > 2 ? 0.5 : this.rng.range(2, 5); }
+        if (ac.clr.to) { ac.phase = 'takeoff'; ac.spool = ac.spd > 2 ? 0 : this.rng.range(2, 5); }
         else { ac.phase = 'luaw'; ac.luawT = 0; }
       } else if (ph === 'exiting' || ph === 'rollout') {
         ac.expExit = false;
@@ -1303,7 +1310,7 @@ const ATC = {};
         this.request(ac, 'clear', `${ac.say}, clear of runway ${this.end.id} at ${ac.exit}${ac.gate || ac.spot ? `, to ${where}` : ''}.`);
       }
     }
-    startLineup(ac) {
+    startLineup(ac, keepSpeed) {
       const hsNode = ac.node;
       const conn = this.N[hsNode].tws.find(t => this.ap.tw[t].conn);
       const L = this.ap.tw[conn].nodes; const ri = L.findIndex(n => this.N[n].rwy); const R = this.N[L[ri]];
@@ -1945,7 +1952,8 @@ const ATC = {};
             let instr = '';
             while (i < toks.length) {
               const o = toks[i];
-              if (/^H\d{3}$/.test(o)) { ac.depHdg = +o.slice(1) % 360 || 360; ac.afterTO = 'climb'; instr = `fly heading ${o.slice(1)}, `; i++; }
+              if (o === 'IMM') { ac.rollTO = true; i++; }
+              else if (/^H\d{3}$/.test(o)) { ac.depHdg = +o.slice(1) % 360 || 360; ac.afterTO = 'climb'; instr = `fly heading ${o.slice(1)}, `; i++; }
               else if (o === 'RH') { ac.depHdg = null; instr = 'fly runway heading, '; i++; }
               else if (o === 'LCT' || o === 'MLT' || o === 'RCT' || o === 'MRT') {
                 if (ac.flight !== 'VFR') { err = 'unable closed traffic, IFR'; break; }
@@ -1966,12 +1974,14 @@ const ATC = {};
             if (ac.role === 'pat') ac.afterTO = 'pattern';
             ac.clr.to = true; ac.req = null;
             const at = ac.route && ac.route.dest && ac.route.dest.conn !== this.fullConn ? ` at ${ac.route.dest.conn}` : (ac.depConn && ac.depConn !== this.fullConn ? ` at ${ac.depConn}` : '');
-            push(`${instr}wind ${this.windStr()}, runway ${rwy}${at}, cleared for takeoff`, `${instr}cleared for takeoff runway ${rwy}`);
+            const imm = ac.rollTO ? 'immediate ' : '';
+            push(`${instr}wind ${this.windStr()}, runway ${rwy}${at}, cleared for ${imm}takeoff`, `${instr}cleared for ${imm}takeoff runway ${rwy}`);
             if (ac.phase === 'hs') this.startLineup(ac);
-            else if (ac.phase === 'luaw') { ac.phase = 'takeoff'; ac.spool = this.rng.range(2, 5); }
+            else if (ac.phase === 'luaw') { ac.phase = 'takeoff'; ac.spool = ac.rollTO ? this.rng.range(0.5, 1.2) : this.rng.range(2, 5); }
             break;
           }
           case 'CAN': {
+            ac.rollTO = false;
             if (ac.phase === 'takeoff' && ac.rolled) {
               if (ac.airborne || ac.ias > ac.vr * 0.8) { err = 'unable, too fast'; break; }
               ac.abort = true; push('cancel takeoff clearance', 'aborting'); break;
@@ -3352,13 +3362,13 @@ const ATC = {};
         }
         if (ready || ac.phase === 'luaw' || ac.phase === 'lineup') {
           let inner = `<div class="row">${ac.phase !== 'luaw' && !ac.clr.luaw ? btn('Line up and wait', 'LUAW') : ''}`;
-          if (ac.flight === 'IFR') inner += `${btn(`Cleared for takeoff`, '__cto', 'go big')}</div><div class="row lab">Fly heading <select id="hdgSel" class="csel">${hdgOpts(ac.depHdg != null ? ac.depHdg : s.H)}</select><span class="hintx">strip: ${ac.depHdg != null ? A.fmtHdg(ac.depHdg) : 'rwy hdg'}</span></div>`;
+          if (ac.flight === 'IFR') inner += `${btn(`Cleared for takeoff`, '__cto', 'go big')}${btn('Immediate takeoff · rolling', '__ctoi', 'go')}</div><div class="row lab">Fly heading <select id="hdgSel" class="csel">${hdgOpts(ac.depHdg != null ? ac.depHdg : s.H)}</select><span class="hintx">strip: ${ac.depHdg != null ? A.fmtHdg(ac.depHdg) : 'rwy hdg'}</span></div>`;
           else {
             const pat = ac.role === 'pat';
             const L = s.sideSg > 0;
             inner += pat
-              ? `${btn(`Cleared for takeoff · ${L ? 'left' : 'right'} closed traffic`, L ? 'CTO LCT' : 'CTO RCT', 'go big')}${btn(`CTO · ${L ? 'right' : 'left'} closed traffic`, L ? 'CTO RCT' : 'CTO LCT')}</div>`
-              : `${btn(`Cleared for takeoff · on course ${ac.vfrDirName || ''}`, 'CTO OC', 'go big')}</div>`;
+              ? `${btn(`Cleared for takeoff · ${L ? 'left' : 'right'} closed traffic`, L ? 'CTO LCT' : 'CTO RCT', 'go big')}${btn('Immediate · rolling', L ? 'CTO IMM LCT' : 'CTO IMM RCT', 'go')}${btn(`CTO · ${L ? 'right' : 'left'} closed traffic`, L ? 'CTO RCT' : 'CTO LCT')}</div>`
+              : `${btn(`Cleared for takeoff · on course ${ac.vfrDirName || ''}`, 'CTO OC', 'go big')}${btn('Immediate · rolling', 'CTO IMM OC', 'go')}</div>`;
             inner += `<div class="row lab"><span class="hintx">Pilot's plan: ${pat ? `pattern work, ${ac.pat ? Math.max(1, ac.pat.laps) : 2} touch &amp; go${ac.pat && ac.pat.laps === 1 ? '' : 's'} then full stop` : `VFR departure to the ${ac.vfrDirName}`}</span></div>`;
           }
           if (ac.clr.to) inner += `<div class="row">${btn('Cancel takeoff clearance', 'CAN', 'bad')}</div>`;
@@ -3423,6 +3433,7 @@ const ATC = {};
       if (c === '__undo') { this.tb.via.pop(); this.previewRoute(); this.renderPanel(true); return; }
       if (c === '__clear') { this.tb.via = []; this.previewRoute(); this.renderPanel(true); return; }
       if (c === '__cto') { const h = ($('#hdgSel') || {}).value; this.send(h ? 'CTO H' + h : 'CTO'); return; }
+      if (c === '__ctoi') { const h = ($('#hdgSel') || {}).value; this.send(h ? 'CTO IMM H' + h : 'CTO IMM'); return; }
       if (c === '__hdg') { const h = ($('#hdgSel') || {}).value; if (h) this.send('H' + h); return; }
       this.send(c);
     }
