@@ -774,7 +774,7 @@ const ATC = {};
       this.setRunway(this.o.rwy);
       this.setWx(this.o.wx, true);
       this.dens = Object.assign({}, DENSITY[this.o.density] || DENSITY.medium);
-      this.next = { arr: 2, dep: 4, pat: 8, vin: 40, wx: this.rng.range(240, 600), wind: 60 };
+      this.next = { arr: this.rng.range(20, 260), dep: 4, pat: 8, vin: this.rng.range(30, 420), wx: this.rng.range(240, 600), wind: 60 };
       this.updateDaylight();
       this.populate();
     }
@@ -786,9 +786,10 @@ const ATC = {};
         const spec = A.makeAirliner(this.rng, this.used); if (!spec) return;
         const ac = this.makeAc(spec, { role: 'arr', flight: 'IFR', x: g.x, y: g.y, hdg: 0, phase: 'parkedArr', node: g.node, gate: g.id, parkNode: g.node });
         g.occ = ac.id;
-        const dur = 15 + i * this.rng.range(70, 160);
+        const dur = this.rng.range(20, 160) + i * this.rng.range(40, 160);
         ac.turnUntil = this.t + dur; this.later(dur, () => this.turnaround(ac));
       });
+      this._first = []; // see below
       const spots = this.ap.spots.slice().sort(() => this.rng() - 0.5);
       spots.slice(0, 4).forEach((p, i) => {
         const ifr = this.rng.chance(0.25);
@@ -796,9 +797,24 @@ const ATC = {};
         if (!spec) return;
         const ac = this.makeAc(spec, { role: 'vin', flight: ifr ? 'IFR' : 'VFR', x: p.x, y: p.y, hdg: 0, phase: 'parkedArr', node: p.node, spot: p.id, parkNode: p.node });
         p.occ = ac.id;
-        const dur = 30 + i * this.rng.range(90, 200);
+        const dur = this.rng.range(20, 200) + i * this.rng.range(50, 200);
         ac.turnUntil = this.t + dur; this.later(dur, () => this.turnaround(ac));
       });
+      // shuffle who calls first so a shift never opens the same way: pull one random stream to the front
+      const pick = this.rng.int(0, this.wx.vfr ? 3 : 2);
+      const early = this.rng.range(4, 25);
+      if (pick === 0) this.next.arr = early;
+      else if (pick === 3) this.next.vin = early;
+      else {
+        const want = pick === 1 ? (a => a.gate) : (a => a.spot);
+        const L = this.acs.filter(a => a.phase === 'parkedArr' && want(a));
+        if (L.length) {
+          const a = this.rng.pick(L);
+          this.timers = this.timers.filter(t => !(t.ac === a));
+          a.turnUntil = this.t + early; this.later(early, () => this.turnaround(a));
+          a._early = true;
+        } else this.next.arr = early;
+      }
     }
 
     /* ---------------- setup ---------------- */
@@ -988,6 +1004,7 @@ const ATC = {};
     // an aircraft that parked becomes the next departure from that gate / spot after its turnaround
     turnaround(old) {
       if (old.removed || old.phase !== 'parkedArr') return;
+      if (old.turnUntil && this.t < old.turnUntil - 1) return; // superseded by a newer schedule
       const g = this.ap.gates.find(x => x.node === old.parkNode), sp = this.ap.spots.find(x => x.node === old.parkNode);
       const T = old.T;
       if (sp && T.ga && !old.airline && old.flight === 'VFR') {
@@ -2687,10 +2704,12 @@ const ATC = {};
       const P = this.pal();
       // pattern guide
       if (this.opts.guide) {
-        ctx.save(); ctx.strokeStyle = wx.dark > 0.5 ? 'rgba(120,160,200,.18)' : 'rgba(255,255,255,.14)'; ctx.setLineDash([6, 8]); ctx.lineWidth = 1;
-        const off = 4200 * sim.sideSg;
-        const pts = [sim.toXY(sim.L + 800, 0), sim.toXY(sim.L + 800, off), sim.toXY(-3000, off), sim.toXY(-3000, 0)];
-        ctx.beginPath(); pts.forEach((p, i) => { const [x, y] = this.w2s(p.x, p.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+        ctx.save(); ctx.strokeStyle = wx.dark > 0.5 ? 'rgba(140,180,220,.35)' : 'rgba(255,255,255,.32)'; ctx.setLineDash([7, 7]); ctx.lineWidth = 1.5;
+        for (const sg of [1, -1]) {
+          const off = 4200 * sg;
+          const pts = [sim.toXY(sim.L + 800, 0), sim.toXY(sim.L + 800, off), sim.toXY(-3000, off), sim.toXY(-3000, 0)];
+          ctx.beginPath(); pts.forEach((p, i) => { const [x, y] = this.w2s(p.x, p.y); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke();
+        }
         const f0 = this.w2s(sim.thr.x, sim.thr.y), f1 = sim.toXY(-3 * NM, 0); const [fx, fy] = this.w2s(f1.x, f1.y);
         ctx.beginPath(); ctx.moveTo(f0[0], f0[1]); ctx.lineTo(fx, fy); ctx.stroke();
         ctx.restore();
