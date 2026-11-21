@@ -219,7 +219,7 @@ table.cmds td:nth-child(3){color:var(--faint);font-family:var(--mono);white-spac
   <div><h3>Tower</h3><table class="cmds">
     <tr><td>Departures</td><td>Line up and wait, cleared for takeoff (IFR heading defaults to the strip; VFR pilots choose pattern work or on-course themselves), cancel takeoff clearance (rejects if rolling), contact departure.</td></tr>
     <tr><td>IFR arrivals</td><td>Cleared to land, go around, final approach speed, 160–180 kt to a fix, expedite exit, plan exit.</td></tr>
-    <tr><td>VFR</td><td>Pilots ask for touch &amp; go or full stop; clear them for it. Enter downwind/base, straight-in, extend downwind, turn base, short approach, 360s, follow traffic, traffic calls, caution wake.</td></tr>
+    <tr><td>VFR</td><td>Pilots ask for touch &amp; go or full stop; clear them for it. Enter left/right downwind or base, straight-in, make left/right traffic (applies from upwind or the next circuit), extend downwind, turn base, short approach, 360s, caution wake. <b>Follow</b>: the pilot extends until the traffic turns base, then turns base where it did and follows it down final.</td></tr>
     <tr><td>Rollout</td><td><b>Expedite runway exit</b> (the pilot brakes harder and takes the first exit they can), or turn at a specific exit.</td></tr>
   </table></div>
   </div>
@@ -1605,8 +1605,13 @@ const ATC = {};
           const uB = P.short ? -1200 : -(P.off * 0.8);
           let turn = false;
           if (P.turnBaseNow) turn = true;
-          else if (!P.ext && up <= uB + r) turn = P.follow ? this.followOK(ac) : true;
-          if (turn) { P.leg = 'base'; P.baseU = Math.min(up - r * 0.9, -700); P.turnBaseNow = false; P.ext = false; }
+          else if (P.follow) {
+            const fb = this.followBaseU(ac);
+            if (fb === null) turn = up <= uB + r;
+            else if (fb !== -Infinity) turn = up <= Math.min(fb, -600) + r;
+          }
+          else if (!P.ext && up <= uB + r) turn = true;
+          if (turn) { P.leg = 'base'; P.baseU = Math.min(up - r * 0.9, -700); P.turnBaseNow = false; P.ext = false; if (P.follow) P.followed = P.follow; }
           break;
         }
         case 'base':
@@ -1647,15 +1652,21 @@ const ATC = {};
       }
       return null;
     }
-    followOK(ac) {
+    // "follow" = fly the leader's track: keep going on downwind until the leader has turned base,
+    // then turn base at the same spot the leader did (or, behind a straight-in, once it passes abeam)
+    followBaseU(ac) {
       const P = ac.pat, L = this.byCs(P.follow);
-      if (!L || L.onGround) return true;
-      if (!P.inSight) return false;
-      const tL = this.timeToThr(L); if (tL === null) return false;
-      const f = this.fr(ac);
-      const tF = (P.off + Math.max(0, -f.u)) / Math.max(ac.gsFps, 60);
-      const sep = L.T.wake === 'S' ? 40 : 65;
-      return tF >= tL + sep;
+      if (!L || L.removed || L.onGround) return null;           // leader landed: normal base turn
+      const fL = this.fr(L);
+      const leaderBase = L.pat && L.pat.baseU != null && (L.pat.leg === 'base' || L.phase === 'final') ? L.pat.baseU : null;
+      if (leaderBase != null) return leaderBase;
+      if (L.phase === 'final') {
+        // straight-in / IFR traffic: turn base once it is far enough ahead on final
+        const f = this.fr(ac);
+        const spacing = (L.T.wake === 'S' ? 3000 : 5500) + P.off * 0.9;
+        return fL.u - f.u >= spacing ? f.u - 1 : -Infinity;      // -Infinity = keep extending
+      }
+      return -Infinity; // leader still on downwind / crosswind: extend
     }
     final(ac, dt) {
       const f = this.fr(ac), dist = -f.u;
@@ -1723,6 +1734,7 @@ const ATC = {};
         ac.pat.laps--; if (ac.pat.laps <= 0) ac.pat.wantFull = true;
         ac.phase = 'takeoff'; ac.tg = true; ac.tgT = 2.5; ac.spool = 0; ac.rolled = true; ac.airborne = false; ac.rotT = 0;
         ac.afterTO = 'pattern'; ac.pat.follow = null; ac.pat.inSight = false; ac.pat.short = false; ac.cwt = false;
+        if (ac.pat.nextSg) { ac.pat.sg = ac.pat.nextSg; ac.pat.nextSg = null; }
         this.score.tg++; this.award(3);
         this.depLog.push({ ac, t: this.t, u0: this.fr(ac).u });
       } else {
@@ -1812,7 +1824,7 @@ const ATC = {};
     }
     trafficCall(ac, o, follow) {
       ac.trafficOf = o.cs;
-      if (ac.pat) { ac.pat.inSight = false; if (follow) ac.pat.follow = o.cs; }
+      if (ac.pat) { ac.pat.inSight = false; if (follow) { ac.pat.follow = o.cs; ac.pat.ext = false; ac.pat.turnBaseNow = false; } }
       let tries = 0;
       const check = () => {
         if (ac.removed || o.removed) return;
@@ -2064,9 +2076,12 @@ const ATC = {};
           case 'LCT': case 'RCT': case 'MLT': case 'MRT': {
             if (ac.flight !== 'VFR') { err = 'unable, IFR'; break; }
             ac.pat = ac.pat || this.newPattern(ac);
-            ac.pat.sg = (k === 'LCT' || k === 'MLT') ? 1 : -1; ac.role = ac.role === 'vin' ? 'vin' : 'pat'; ac.afterTO = 'pattern';
+            const sg = (k === 'LCT' || k === 'MLT') ? 1 : -1;
+            const nowOk = ac.onGround || ac.phase === 'climb' || (ac.phase === 'pattern' && ac.pat.leg === 'upwind');
+            if (nowOk) ac.pat.sg = sg; else ac.pat.nextSg = sg;
+            ac.role = ac.role === 'vin' ? 'vin' : 'pat'; ac.afterTO = 'pattern';
             if (ac.phase === 'climb') { ac.phase = 'pattern'; ac.pat.leg = 'upwind'; }
-            push(`make ${ac.pat.sg > 0 ? 'left' : 'right'} closed traffic`);
+            push(`make ${sg > 0 ? 'left' : 'right'} closed traffic`);
             break;
           }
           case 'ED':
@@ -2151,7 +2166,7 @@ const ATC = {};
         case 'takeoff': return ac.tg ? 'Touch & go' : ac.abort ? 'Rejecting takeoff' : 'Takeoff roll';
         case 'climb': if (ac.ho) return `With departure · ${String(Math.round(ac.alt / 100)).padStart(3, '0')}`; return `Departing ${ac.depHdg != null && ac.flight === 'IFR' ? 'hdg ' + A.fmtHdg(ac.depHdg) : ac.vfrDirName || 'rwy hdg'}`;
         case 'final': return `${(Math.max(0, -f.u) / NM).toFixed(1)} nm final`;
-        case 'pattern': return ({ upwind: 'Upwind', crosswind: 'Crosswind', downwind: 'Downwind', base: 'Base', to45: 'To 45° entry', '45': '45° entry', tobase: 'To base entry', tofinal: 'To straight-in' }[ac.pat.leg] || 'Pattern') + (ac.pat.ext ? ' (ext)' : '') + (ac.pat.follow ? ` ▸${ac.pat.follow}` : '');
+        case 'pattern': return (ac.pat.sg > 0 ? 'L ' : 'R ') + ({ upwind: 'Upwind', crosswind: 'Crosswind', downwind: 'Downwind', base: 'Base', to45: 'To 45° entry', '45': '45° entry', tobase: 'To base entry', tofinal: 'To straight-in' }[ac.pat.leg] || 'Pattern') + (ac.pat.ext ? ' (ext)' : '') + (ac.pat.follow ? ` ▸${ac.pat.follow}` : '');
         case 'inbound': return `Inbound ${(Math.hypot(ac.x, ac.y) / NM).toFixed(1)} nm`;
         case 'rollout': return `Rollout → ${ac.exit}`;
         case 'exiting': return `Exiting ${ac.exit}`;
@@ -3294,7 +3309,7 @@ const ATC = {};
       const ready = s.toReady(ac);
       const crossing = ac.path && ac.path.stops.some(t => t.kind === 'rwy' && !t.cleared && t.s > ac.path.s - 10);
       const tb = this.builder(ac);
-      const key = [ac.id, ac.phase, ready, crossing, ac.pat && ac.pat.leg, !!ac.req, ac.clr.land, ac.clr.to, ac.clr.luaw, ac.onGround, ac.ho, ac.expExit, ac.expedite, tb.dest, tb.via.join(','), ac.holdPos, ac.pat && ac.pat.ext, ac.pat && ac.pat.wantFull, ac.pat && ac.pat.laps].join('|');
+      const key = [ac.id, ac.phase, ready, crossing, ac.pat && ac.pat.leg, !!ac.req, ac.clr.land, ac.clr.to, ac.clr.luaw, ac.onGround, ac.ho, ac.expExit, ac.expedite, tb.dest, tb.via.join(','), ac.holdPos, ac.pat && ac.pat.ext, ac.pat && ac.pat.wantFull, ac.pat && ac.pat.laps, ac.pat && ac.pat.sg, ac.pat && ac.pat.nextSg, ac.pat && ac.pat.follow].join('|');
       if (!force && this.panelKey === key) { const st = $('#pstat'); if (st) st.textContent = s.status(ac); const rq = $('#preqw'); if (rq && ac.req) rq.textContent = Math.round(s.t - ac.req.t) + 's'; return; }
       this.panelKey = key;
       let hk = 0;
@@ -3338,8 +3353,11 @@ const ATC = {};
           if (ac.flight === 'IFR') inner += `${btn(`Cleared for takeoff`, '__cto', 'go big')}</div><div class="row lab">Fly heading <select id="hdgSel" class="csel">${hdgOpts(ac.depHdg != null ? ac.depHdg : s.H)}</select><span class="hintx">strip: ${ac.depHdg != null ? A.fmtHdg(ac.depHdg) : 'rwy hdg'}</span></div>`;
           else {
             const pat = ac.role === 'pat';
-            inner += `${btn(pat ? `Cleared for takeoff · ${s.sideSg > 0 ? 'left' : 'right'} closed traffic` : `Cleared for takeoff · on course ${ac.vfrDirName || ''}`, pat ? (s.sideSg > 0 ? 'CTO LCT' : 'CTO RCT') : 'CTO OC', 'go big')}</div>
-              <div class="row lab"><span class="hintx">Pilot's plan: ${pat ? `pattern work, ${ac.pat ? Math.max(1, ac.pat.laps) : 2} touch &amp; go${ac.pat && ac.pat.laps === 1 ? '' : 's'} then full stop` : `VFR departure to the ${ac.vfrDirName}`}</span></div>`;
+            const L = s.sideSg > 0;
+            inner += pat
+              ? `${btn(`Cleared for takeoff · ${L ? 'left' : 'right'} closed traffic`, L ? 'CTO LCT' : 'CTO RCT', 'go big')}${btn(`CTO · ${L ? 'right' : 'left'} closed traffic`, L ? 'CTO RCT' : 'CTO LCT')}</div>`
+              : `${btn(`Cleared for takeoff · on course ${ac.vfrDirName || ''}`, 'CTO OC', 'go big')}</div>`;
+            inner += `<div class="row lab"><span class="hintx">Pilot's plan: ${pat ? `pattern work, ${ac.pat ? Math.max(1, ac.pat.laps) : 2} touch &amp; go${ac.pat && ac.pat.laps === 1 ? '' : 's'} then full stop` : `VFR departure to the ${ac.vfrDirName}`}</span></div>`;
           }
           if (ac.clr.to) inner += `<div class="row">${btn('Cancel takeoff clearance', 'CAN', 'bad')}</div>`;
           body += sec('Departure', inner);
@@ -3376,6 +3394,8 @@ const ATC = {};
             body += sec(`Landing · pilot wants ${req.toLowerCase()}`, full
               ? `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${btn('Go around', 'GA', 'bad')}</div>`
               : `<div class="row">${btn('Cleared touch and go', 'TG', 'go big')}${btn('Cleared to land (full stop)', 'CTL')}${btn('Go around', 'GA', 'bad')}</div>`);
+            const sideNow = P ? (P.nextSg || P.sg) : s.sideSg;
+            body += sec(`Traffic pattern · ${sideNow > 0 ? 'left' : 'right'} traffic${P && P.nextSg ? ' (next circuit)' : ''}`, `<div class="row">${btn('Make left traffic', 'LCT', sideNow > 0 ? 'ghost' : '')}${btn('Make right traffic', 'RCT', sideNow < 0 ? 'ghost' : '')}</div>`);
             body += sec('Sequencing', `<div class="row">${P && P.ext ? btn('Turn base', 'TB', 'go') : btn('Extend downwind', 'ED')}${!(P && P.ext) ? btn('Turn base now', 'TB') : ''}${btn('Short approach', 'SA')}${btn('Left 360', 'L360')}${btn('Right 360', 'R360')}${btn('Caution wake', 'CWT', 'warn')}</div>
               <div class="row"><select data-pre="FOLLOW" class="csel"><option value="">Follow traffic…</option>${others.map(o => `<option value="${o.cs}">${o.cs} · ${o.type} · ${esc(s.status(o))}</option>`).join('')}</select>
               <select data-pre="TFC" class="csel"><option value="">Traffic call…</option>${others.map(o => `<option value="${o.cs}">${o.cs} · ${o.type}</option>`).join('')}</select></div>`);
