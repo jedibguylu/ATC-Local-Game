@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Local Control — Tower Simulator</title>
 <style>
 :root{
@@ -149,7 +149,65 @@ table.cmds td:nth-child(3){color:var(--faint);font-family:var(--mono);white-spac
 .wt b{font-family:var(--mono);font-size:17px;color:var(--amber)} .wt span{font-size:11px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wt em{position:absolute;left:0;bottom:0;height:3px;background:var(--amber)}
 .wt.done{border-color:var(--green);animation:pulse 0.8s infinite} .wt.done b{color:var(--green)} .wt.done em{background:var(--green)}
-@media (max-width:900px){#app{grid-template-columns:1fr;grid-template-rows:44px 1fr 170px 300px}#side{grid-row:4;grid-column:1;flex-direction:row}#brite{width:40%;height:100%}#panel{max-height:none;width:60%}#strips{display:none}.hint,#metar{display:none}}
+
+/* ---------- phone layout (body.mobile set by script) ---------- */
+#menuBtn,#speedCycle,#mtabs{display:none}
+#moreMenu{display:contents}
+html,body{overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+button,select{touch-action:manipulation}
+#view,#brite{touch-action:none}
+body.mobile{font-size:14px}
+body.mobile #app{grid-template-columns:1fr;grid-template-rows:auto 1fr auto auto;height:100vh;height:100dvh;padding-bottom:env(safe-area-inset-bottom)}
+body.mobile #top{grid-column:1;gap:10px;padding:4px 8px;padding-top:max(4px,env(safe-area-inset-top));min-height:46px}
+body.mobile .brand,body.mobile #metar,body.mobile #counts,body.mobile .tk.hm,body.mobile .spd,body.mobile .hint{display:none}
+body.mobile #menuBtn,body.mobile #speedCycle{display:inline-block}
+body.mobile #top .grp{margin-left:auto}
+body.mobile .tbtn{padding:7px 10px;font-size:13px}
+body.mobile #moreMenu{display:none}
+body.mobile.menu-open #moreMenu{display:flex;flex-direction:column;gap:6px;position:fixed;right:8px;top:calc(50px + env(safe-area-inset-top));z-index:20;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:8px;box-shadow:0 10px 30px rgba(0,0,0,.6)}
+body.mobile.menu-open #moreMenu .grp{flex-direction:column;margin:0}
+body.mobile.menu-open #moreMenu .tbtn{text-align:left;padding:10px 14px;font-size:14px}
+body.mobile #scope{grid-column:1;grid-row:2;min-height:0}
+body.mobile #side,body.mobile #comm{grid-column:1;grid-row:3;height:42vh;height:42dvh;border-left:none;border-top:1px solid var(--line);min-height:0}
+body.mobile #side>*{display:none}
+body.mobile #comm{display:none}
+body.mobile[data-tab=radio] #side{display:none}
+body.mobile[data-tab=radio] #comm{display:flex}
+body.mobile[data-tab=ac] #panel{display:block;max-height:none;flex:1;overflow:auto;padding:10px}
+body.mobile[data-tab=strips] #strips{display:block}
+body.mobile[data-tab=scope] #brite{display:block;height:100%;flex:1}
+body.mobile.collapsed #side,body.mobile.collapsed #comm{display:none!important}
+body.mobile #mtabs{display:flex;grid-column:1;grid-row:4;background:#0e141b;border-top:1px solid var(--line)}
+#mtabs button{flex:1;background:none;border:none;color:var(--dim);padding:10px 2px 12px;font-size:13px;position:relative}
+#mtabs button.on{color:var(--amber);box-shadow:inset 0 2px 0 var(--amber)}
+#mtabs b{display:none;position:absolute;top:4px;right:calc(50% - 30px);background:var(--amber);color:#111;font-size:10px;border-radius:8px;padding:0 5px;font-family:var(--mono)}
+#mtabs b.show{display:inline-block}
+#nextReq{color:var(--amber)!important}
+body.mobile .cb{min-height:42px;padding:9px 12px;font-size:14px}
+body.mobile .cb.big{min-height:46px}
+body.mobile .cb i{display:none}
+body.mobile .chip{padding:8px 12px;font-size:13px}
+body.mobile select,body.mobile .csel{min-height:40px;font-size:14px}
+body.mobile .row{gap:7px;margin-top:7px}
+body.mobile #log{font-size:11px}
+body.mobile .ll{grid-template-columns:52px 64px 1fr}
+body.mobile #loghead .hint{display:none}
+body.mobile #viewbtns{top:6px;left:6px} body.mobile #viewbtns .tbtn{padding:6px 9px;font-size:12px}
+body.mobile #timers{top:44px;left:6px;width:112px}
+body.mobile #timers .tbtn{padding:5px 6px;font-size:12px}
+body.mobile #pausedBanner{top:auto;bottom:10px;left:auto;right:10px;transform:none;padding:3px 10px;font-size:12px}
+body.mobile .strip{padding:8px 9px}
+body.mobile .card{padding:16px;width:100vw;max-height:100dvh;border-radius:0}
+body.mobile .cols{grid-template-columns:1fr}
+body.mobile .ph b{font-size:17px}
+/* phone in landscape: drawer on the right */
+body.mobile.mland #app{grid-template-columns:1fr 44%;grid-template-rows:auto 1fr auto}
+body.mobile.mland #top{grid-column:1/3}
+body.mobile.mland #scope{grid-column:1;grid-row:2/4}
+body.mobile.mland #side,body.mobile.mland #comm{grid-column:2;grid-row:2;height:auto;border-top:none;border-left:1px solid var(--line)}
+body.mobile.mland #mtabs{grid-column:2;grid-row:3}
+body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
+@media (max-width:900px) and (min-width:99999px){#app{grid-template-columns:1fr;grid-template-rows:44px 1fr 170px 300px}#side{grid-row:4;grid-column:1;flex-direction:row}#brite{width:40%;height:100%}#panel{max-height:none;width:60%}#strips{display:none}.hint,#metar{display:none}}
 </style>
 </head>
 <body>
@@ -160,13 +218,16 @@ table.cmds td:nth-child(3){color:var(--faint);font-family:var(--mono);white-spac
     <div class="tk"><small>ATIS</small><b id="atis">-</b></div>
     <div class="tk"><small>Rwy</small><b id="rwyIn">27</b></div>
     <div class="tk"><small>Cat</small><b id="vfrIn">VFR</b></div>
-    <div class="tk"><small>Weather</small><b id="wxIn">-</b></div>
+    <div class="tk hm"><small>Weather</small><b id="wxIn">-</b></div>
     <div id="metar"></div>
     <div class="tk"><small>Score</small><b id="score">0</b></div>
     <div id="counts"></div>
-    <div class="grp"><button class="tbtn" id="pauseBtn">❚❚ Pause</button><button class="tbtn" data-speed="1">1×</button><button class="tbtn" data-speed="2">2×</button><button class="tbtn" data-speed="4">4×</button></div>
-    <div class="grp"><button class="tbtn" id="tagsBtn">Tags</button><button class="tbtn" id="guideBtn">Guide</button><button class="tbtn" id="voiceBtn">Voice</button></div>
-    <div class="grp"><button class="tbtn" id="reportBtn">Report</button><button class="tbtn" id="helpBtn">?</button><button class="tbtn" id="newBtn">New shift</button></div>
+    <div class="grp"><button class="tbtn" id="pauseBtn">❚❚ Pause</button><button class="tbtn spd" data-speed="1">1×</button><button class="tbtn spd" data-speed="2">2×</button><button class="tbtn spd" data-speed="4">4×</button><button class="tbtn" id="speedCycle">1×</button></div>
+    <div id="moreMenu">
+      <div class="grp"><button class="tbtn" id="tagsBtn">Tags</button><button class="tbtn" id="guideBtn">Guide</button><button class="tbtn" id="voiceBtn">Voice</button></div>
+      <div class="grp"><button class="tbtn" id="reportBtn">Report</button><button class="tbtn" id="helpBtn">?</button><button class="tbtn" id="newBtn">New shift</button></div>
+    </div>
+    <button class="tbtn" id="menuBtn">☰</button>
   </header>
   <section id="scope">
     <canvas id="view"></canvas>
@@ -183,6 +244,13 @@ table.cmds td:nth-child(3){color:var(--faint);font-family:var(--mono);white-spac
     <div id="loghead"><span>Frequency</span><span class="hint"><kbd>Tab</kbd> next request · <kbd>1</kbd>–<kbd>0</kbd> panel buttons · <kbd>Enter</kbd> send taxi · <kbd>Space</kbd> pause · <kbd>?</kbd> help</span></div>
     <div id="log"></div>
   </footer>
+  <nav id="mtabs">
+    <button data-tab="ac">Aircraft</button>
+    <button data-tab="strips">Strips</button>
+    <button data-tab="radio">Radio<b id="radioBadge"></b></button>
+    <button data-tab="scope">DBRITE</button>
+    <button id="nextReq">Next<b id="reqBadge"></b></button>
+  </nav>
 </div>
 
 <div class="modal" id="start"><div class="card">
@@ -2960,7 +3028,7 @@ const ATC = {};
     }
     pick(sx, sy) {
       if (this.tagBoxes) for (const b of this.tagBoxes) if (sx >= b.x && sx <= b.x + b.w && sy >= b.y && sy <= b.y + b.h) return b.id;
-      let best = null, bd = 22;
+      let best = null, bd = this.touch ? 34 : 22;
       for (const ac of this.sim.acs) {
         if (ac.removed || ac.phase === 'parkedArr') continue;
         const [x, y] = this.w2s(ac.x, ac.y);
@@ -3070,7 +3138,52 @@ const ATC = {};
         const b = document.querySelector(`#panel .cb[data-hk="${e.key}"]`);
         if (b) { b.classList.add('flash'); setTimeout(() => b.classList.remove('flash'), 150); b.click(); e.preventDefault(); }
       });
-      window.addEventListener('resize', () => { if (this.r) { this.r.resize(); this.b.resize(); } });
+      window.addEventListener('resize', () => { this.detectLayout(); if (this.r) { this.r.resize(); this.b.resize(); } });
+      window.addEventListener('orientationchange', () => setTimeout(() => this.detectLayout(), 200));
+      this.setupMobile();
+    }
+    /* ---------- phone vs desktop ---------- */
+    detectLayout() {
+      const w = window.innerWidth, h = window.innerHeight;
+      const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+      const mobile = w <= 820 || (coarse && Math.min(w, h) <= 600);
+      const b = document.body;
+      b.classList.toggle('mobile', mobile);
+      b.classList.toggle('mland', mobile && w > h);
+      if (!mobile) b.classList.remove('menu-open', 'collapsed');
+      this.mobile = mobile;
+      if (this.r) this.r.touch = mobile || coarse;
+    }
+    setupMobile() {
+      this.detectLayout();
+      document.body.dataset.tab = 'strips';
+      document.querySelectorAll('#mtabs [data-tab]').forEach(btn => btn.onclick = () => this.setTab(btn.dataset.tab, true));
+      $('#nextReq').onclick = () => { this.nextRequest(); };
+      $('#menuBtn').onclick = e => { document.body.classList.toggle('menu-open'); e.stopPropagation(); };
+      $('#speedCycle').onclick = () => { this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 4 : 1; this.syncTop(); };
+      document.addEventListener('click', e => { if (!e.target.closest('#moreMenu') && e.target.id !== 'menuBtn') document.body.classList.remove('menu-open'); });
+      document.querySelectorAll('#moreMenu .tbtn').forEach(b => b.addEventListener('click', () => setTimeout(() => document.body.classList.remove('menu-open'), 50)));
+      // keep canvases sized to their boxes whatever the layout does
+      if (window.ResizeObserver) {
+        const ro = new ResizeObserver(() => { if (this.r) this.r.resize(); if (this.b) this.b.resize(); });
+        ro.observe($('#view')); ro.observe($('#brite'));
+      }
+      this.syncTabs();
+    }
+    setTab(tab, fromUser) {
+      const b = document.body;
+      if (fromUser && b.dataset.tab === tab && !b.classList.contains('collapsed')) b.classList.add('collapsed');
+      else { b.classList.remove('collapsed'); b.dataset.tab = tab; }
+      if (tab === 'radio') { this.unread = 0; const log = $('#log'); log.scrollTop = log.scrollHeight; }
+      this.syncTabs();
+      setTimeout(() => { if (this.r) this.r.resize(); if (this.b) this.b.resize(); }, 30);
+    }
+    syncTabs() {
+      const b = document.body;
+      document.querySelectorAll('#mtabs [data-tab]').forEach(x => x.classList.toggle('on', x.dataset.tab === b.dataset.tab && !b.classList.contains('collapsed')));
+      const rb = $('#radioBadge'); if (rb) { rb.textContent = this.unread || ''; rb.classList.toggle('show', !!this.unread && b.dataset.tab !== 'radio'); }
+      const n = this.sim ? this.sim.acs.filter(a => a.req && !a.removed).length : 0;
+      const qb = $('#reqBadge'); if (qb) { qb.textContent = n || ''; qb.classList.toggle('show', !!n); }
     }
     modal(sel, open) { $(sel).classList.toggle('open', open); }
     showStart() { this.modal('#start', true); }
@@ -3091,7 +3204,7 @@ const ATC = {};
       this.modal('#start', false);
       this.paused = false; this.speed = 1;
       this.r.resize(); this.b.resize();
-      this.setView('pattern');
+      this.setView(this.mobile && window.innerHeight > window.innerWidth ? 'field' : 'pattern');
       const w = this.sim.wx;
       this.logLine({ from: 'sys', text: `Position open: Local + Ground, ${this.sim.ap.icao}. Runway ${this.sim.end.id} in use with ${this.sim.sideSg > 0 ? 'left' : 'right'} traffic for this shift. ${w.label}, wind ${this.sim.windStr()}. Click an aircraft, then use the buttons (number keys work too). Press ? for help.`, cls: 'sys', t: 0 });
       this.syncTop(); this.renderPanel(true);
@@ -3141,7 +3254,12 @@ const ATC = {};
         else { const dx = t[0].clientX - tp.x, dy = t[0].clientY - tp.y; if (Math.abs(dx) + Math.abs(dy) > 6) tp.moved = true; this.r.view.cx = tp.cx - dx / this.r.view.scale; this.r.view.cy = tp.cy + dy / this.r.view.scale; }
       }, { passive: false });
       cv.addEventListener('touchend', e => {
-        if (tp && !tp.moved && tp.n === 1) { const rect = cv.getBoundingClientRect(); this.select(this.r.pick(tp.x - rect.left, tp.y - rect.top)); }
+        if (tp && !tp.moved && tp.n === 1) {
+          const rect = cv.getBoundingClientRect(); const sx = tp.x - rect.left, sy = tp.y - rect.top;
+          const id = this.r.pick(sx, sy);
+          if (id) this.select(id); else this.mapClick(this.r.s2w(sx, sy));
+          e.preventDefault();
+        }
         tp = null;
       });
     }
@@ -3149,7 +3267,10 @@ const ATC = {};
       const c = $('#brite');
       c.addEventListener('click', e => { const r = c.getBoundingClientRect(); const id = this.b.pick(e.clientX - r.left, e.clientY - r.top); if (id) this.select(id); });
     }
-    select(id) { this.sel = id; this.r.sel = id; this.b.sel = id; this.renderPanel(true); this.renderStrips(); }
+    select(id) {
+      this.sel = id; this.r.sel = id; this.b.sel = id; this.renderPanel(true); this.renderStrips();
+      if (this.mobile && id) this.setTab('ac');
+    }
     nextRequest() {
       const L = this.sim.acs.filter(a => a.req && !a.removed).sort((a, b) => a.req.t - b.req.t);
       if (!L.length) return;
@@ -3177,14 +3298,17 @@ const ATC = {};
         this.drain();
         if (this.sel && !this.sim.byId(this.sel)) this.select(null);
         this.clampView(); this.r.draw(t); this.b.draw(); this.drawClock();
-        if (t - (this.lastUi || 0) > 250) { this.lastUi = t; this.renderStrips(); this.renderPanel(false); this.syncTop(); this.renderTimers(); }
+        if (t - (this.lastUi || 0) > 250) { this.lastUi = t; this.renderStrips(); this.renderPanel(false); this.syncTop(); this.renderTimers(); this.syncTabs(); }
       }
       requestAnimationFrame(tt => this.loop(tt));
     }
     drain() {
       const ob = this.sim.outbox; if (!ob.length) return;
       this.sim.outbox = [];
-      for (const m of ob) { this.logLine(m); if (m.from === 'pilot' && this.voice) this.speak(m); }
+      for (const m of ob) {
+        this.logLine(m); if (m.from === 'pilot' && this.voice) this.speak(m);
+        if (this.mobile && m.from === 'pilot' && document.body.dataset.tab !== 'radio') this.unread = (this.unread || 0) + 1;
+      }
     }
     fmtT(t) { const s = Math.floor((this.sim.tod0 + t * this.sim.o.timeScale) % 86400); return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor(s / 60) % 60).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; }
     logLine(m) {
@@ -3232,6 +3356,8 @@ const ATC = {};
       $('#pauseBtn').textContent = this.paused ? '▶ Resume' : '❚❚ Pause';
       $('#pauseBtn').classList.toggle('on', this.paused);
       document.querySelectorAll('[data-speed]').forEach(b => b.classList.toggle('on', +b.dataset.speed === this.speed));
+      const spc = $('#speedCycle'); if (spc) spc.textContent = this.speed + '×';
+      $('#pauseBtn').textContent = this.mobile ? (this.paused ? '▶' : '❚❚') : (this.paused ? '▶ Resume' : '❚❚ Pause');
       $('#tagsBtn').textContent = 'Tags: ' + { all: 'All', air: 'Air', off: 'Off' }[this.r.opts.tags];
       $('#guideBtn').classList.toggle('on', this.r.opts.guide);
       $('#voiceBtn').classList.toggle('on', this.voice);
@@ -3371,7 +3497,7 @@ const ATC = {};
           const own = ac.gate || ac.spot;
           const parks = [...s.ap.gates.map(g => g.id), ...s.ap.spots.map(p => p.id)];
           const chip = d => `<button class="chip ${tb.dest === d ? 'on' : ''}" data-dest="${d}">${d.includes('@') ? d.replace('@', ' @ ') : d === R ? `Rwy ${R} full` : d}</button>`;
-          const viaChips = tb.via.length ? tb.via.map(v => `<span class="vchip">${v}</span>`).join('<span class="arr">›</span>') : `<span class="hintx">Click taxiways on the map in order, or leave empty for the auto route</span>`;
+          const viaChips = tb.via.length ? tb.via.map(v => `<span class="vchip">${v}</span>`).join('<span class="arr">›</span>') : `<span class="hintx">${this.mobile ? 'Tap' : 'Click'} taxiways on the map in order, or leave empty for the auto route</span>`;
           const pv = this.r.preview && this.tb.id === ac.id ? this.r.preview.via.join(' ') : '';
           body += sec('Taxi', `<div class="row">${rwyDests.map(chip).join('')}</div>
             <div class="row">${own ? chip(own) : ''}<select class="csel" id="parkSel"><option value="">Other parking…</option>${parks.filter(p => p !== own).map(p => `<option ${tb.dest === p ? 'selected' : ''}>${p}</option>`).join('')}</select></div>
