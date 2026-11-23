@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<script>
+/* ===== GLOBAL LEADERBOARD ===============================================
+   Paste your Supabase project URL and publishable (or legacy anon) key here.
+   Leave them empty and scores are kept only in this browser.
+   ======================================================================== */
+window.LC_LEADERBOARD = { url: 'https://fanmtpzhsdytkuzqszzy.supabase.co', key: 'sb_publishable_lGT6YR0OtZZ5U84ZffaPcQ_Ppbkrj4y' };
+</script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Local Control — Tower Simulator</title>
@@ -33,6 +40,21 @@ button{font:inherit;color:inherit}
 #view{width:100%;height:100%;display:block;cursor:grab}
 #viewbtns{position:absolute;left:10px;top:10px;display:flex;gap:4px}
 #viewbtns .tbtn{background:rgba(10,14,19,.75)}
+/* modes, leaderboard */
+.modes label em{font-size:11px}
+#pname{width:100%;max-width:320px;background:#0d1117;border:1px solid #2b3440;color:#e8ecf1;border-radius:6px;padding:8px 10px;font:600 14px ui-monospace,Menlo,monospace}
+.startRow{display:flex;gap:10px;align-items:center;justify-content:flex-end;margin-top:14px;flex-wrap:wrap}
+.ghost-big{background:transparent;border:1px solid #3a4655;color:#cfd8e3;border-radius:6px;padding:10px 16px;font-weight:700;cursor:pointer}
+.ghost-big:hover{border-color:#6b7b8e}
+.btabs{display:flex;gap:6px;margin:8px 0 12px;flex-wrap:wrap}
+.btabs button{background:#151b23;border:1px solid #2b3440;color:#9fb0c2;border-radius:5px;padding:6px 12px;cursor:pointer;font-weight:600}
+.btabs button.on{border-color:var(--amber);color:var(--amber)}
+table.lb{width:100%;border-collapse:collapse;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+table.lb th{text-align:left;color:#7d8b99;font-weight:600;font-size:11px;letter-spacing:.06em;padding:4px 6px;border-bottom:1px solid #2b3440}
+table.lb td{padding:5px 6px;border-bottom:1px solid #1b222b}
+table.lb td.n,table.lb th.n{text-align:right} table.lb tr.me td{color:var(--amber)}
+.bnote{font-size:12px;color:#7d8b99;margin:8px 0}
+body.comp-paused #view,body.comp-paused #brite{filter:blur(22px) brightness(.25)}
 #pausedBanner{position:absolute;left:50%;top:12px;transform:translateX(-50%);background:rgba(255,179,60,.15);border:1px solid var(--amber);color:var(--amber);padding:4px 14px;border-radius:4px;font-family:var(--mono);font-weight:700;letter-spacing:.2em;display:none;pointer-events:none}
 #side{grid-row:2/4;grid-column:2;display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line);min-height:0}
 #brite{width:100%;height:250px;display:block;border-bottom:1px solid var(--line);cursor:crosshair;flex:none}
@@ -111,6 +133,7 @@ input.small{width:54px;text-transform:uppercase}
 .maps em{display:block;font-style:normal;color:var(--dim);font-size:12px;margin-top:4px;line-height:1.4}
 .maps input:checked+span{border-color:var(--amber);background:#221a0b}
 .maps input:checked+span b{color:var(--amber)}
+.startRow .go-big{margin-top:0}
 .go-big{margin-top:20px;background:var(--amber);color:#1a1205;border:none;border-radius:6px;padding:10px 26px;font-weight:800;letter-spacing:.12em;cursor:pointer;font-family:var(--mono);font-size:14px}
 .intro{color:#b5c1ce;line-height:1.55;margin-top:14px;font-size:13px}
 .intro b{color:var(--text)}
@@ -229,6 +252,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <div class="tk hm"><small>Weather</small><b id="wxIn">-</b></div>
     <div id="metar"></div>
     <div class="tk"><small>Score</small><b id="score">0</b></div>
+    <div class="tk" id="compTk" style="display:none"><small>Traffic</small><b id="compLvl">100%</b></div>
     <div id="counts"></div>
     <div class="grp"><button class="tbtn" id="pauseBtn">❚❚ Pause</button><button class="tbtn spd" data-speed="1">1×</button><button class="tbtn spd" data-speed="2">2×</button><button class="tbtn spd" data-speed="4">4×</button><button class="tbtn" id="speedCycle">1×</button></div>
     <div id="moreMenu">
@@ -264,6 +288,12 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
 <div class="modal" id="start"><div class="card">
   <h1>LOCAL CONTROL</h1>
   <h2>Tower simulator — combined Local &amp; Ground</h2>
+  <h3>Mode</h3>
+  <div class="maps modes">
+    <label><input type="radio" name="mode" value="endless" checked><span><b>Endless</b><em>Pick the traffic level and work as long as you like. The shift never ends.</em></span></label>
+    <label><input type="radio" name="mode" value="comp"><span><b>Competition</b><em>Starts at heavy traffic and adds 10% every 5 minutes. 1× speed only. The shift ends the moment your score drops below zero; your best score goes on the map's leaderboard.</em></span></label>
+  </div>
+  <div id="compName" style="display:none"><h3>Name for the leaderboard</h3><input id="pname" maxlength="20" placeholder="optional" autocomplete="off"></div>
   <h3>Airport</h3>
   <div class="maps">
     <label><input type="radio" name="map" value="single" checked><span><b>KTTR · Single runway</b><em>9/27 · GA field, about 80% GA. Busy closed traffic, two runway crossings to the FBO.</em></span></label>
@@ -271,12 +301,29 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <label><input type="radio" name="map" value="cross"><span><b>KTTX · Crossing runways</b><em>9/27 × 18/36 on the coast · even airline/GA mix. Intersecting-runway separation and LAHSO.</em></span></label>
   </div>
   <div class="opts">
-    <div><h3>Traffic</h3><div class="og"><label><input type="radio" name="dens" value="light"><span>Light</span></label><label><input type="radio" name="dens" value="medium" checked><span>Medium</span></label><label><input type="radio" name="dens" value="heavy"><span>Heavy</span></label></div></div>
+    <div id="densOpt"><h3>Traffic</h3><div class="og"><label><input type="radio" name="dens" value="light"><span>Light</span></label><label><input type="radio" name="dens" value="medium" checked><span>Medium</span></label><label><input type="radio" name="dens" value="heavy"><span>Heavy</span></label></div></div>
     <div><h3>Data tags</h3><div class="og"><label><input type="radio" name="tags" value="all" checked><span>All</span></label><label><input type="radio" name="tags" value="air"><span>Airborne</span></label><label><input type="radio" name="tags" value="off"><span>Off</span></label></div></div>
     <div><h3>Pilot voice</h3><div class="og"><label><input type="radio" name="voice" value="off" checked><span>Off</span></label><label><input type="radio" name="voice" value="on"><span>On</span></label></div></div>
   </div>
   <div class="intro" style="font-size:12px;color:var(--dim)">Each shift picks the runway configuration and traffic pattern at random. Weather changes as you work: VFR, haze, rain under a low ceiling, or fog. When the field goes IFR, the pattern closes. Time of day runs on a 10-minute day, so you'll work sunset, night, and sunrise every shift. In low visibility you see only lights past the tower's visibility, plus whatever the DBRITE and data tags show.</div>
-  <button class="go-big" id="startBtn">OPEN POSITION ▸</button>
+  <div class="startRow"><button class="ghost-big" id="boardBtn">Leaderboards</button><button class="go-big" id="startBtn">OPEN POSITION ▸</button></div>
+</div></div>
+
+<div class="modal" id="board"><div class="card">
+  <button class="x" data-close="board">Close</button>
+  <h1 style="font-size:20px">LEADERBOARDS</h1>
+  <div class="btabs" id="btabs"></div>
+  <div id="boardBody"></div>
+  <div class="bnote" id="boardNote"></div>
+</div></div>
+
+<div class="modal" id="over"><div class="card">
+  <h1 style="font-size:22px">SHIFT OVER</h1>
+  <h2 id="overSub"></h2>
+  <div class="rgrid" id="overStats"></div>
+  <div class="bnote" id="overSaved"></div>
+  <div id="overBoard"></div>
+  <div class="startRow"><button class="ghost-big" id="overReport">Shift report</button><button class="go-big" id="overNew">NEW SHIFT ▸</button></div>
 </div></div>
 
 <div class="modal" id="help"><div class="card">
@@ -313,6 +360,8 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <b>Dep behind arrival</b><span>Arrival must be off the runway before the roll</span>
     <b>Crossing runways</b><span>Traffic on the intersecting runway must be past the intersection before a departure rolls or an arrival crosses the threshold</span>
     <b>Go-arounds</b><span>A go-around flying over the runway doesn't count against SRS</span>
+    <b>Delays</b><span>Any aircraft kept waiting 3 minutes anywhere but its gate or parking spot (stopped on a taxiway, holding short, in position, or calling you without an answer) costs 30 points, and again every further 3 minutes</span>
+    <b>Competition</b><span>Heavy traffic to start, +10% every 5 minutes, 1× speed only, and pausing hides the scope. The shift ends when the score drops below zero; your best score of the shift goes on that airport's leaderboard</span>
     <b>LAHSO</b><span>On KTTX, "Land, hold short" appears when the arrival can stop and turn off before the crossing runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). A LAHSO arrival and traffic on the crossing runway don't have to wait for each other; the hold-short point shows as a dashed bar</span>
     <b>Departure direction</b><span>Departure strips show the direction of flight and destination (e.g. SE · ATL) — on KTTP send southbound traffic to the south runway and northbound traffic to the north one</span>
     <b>One-way taxiways</b><span>Yellow arrows show one-way taxiways. The ramp exits flip with the runway flow: on the 9s D (and G on KTTP) is out and E (and H) is in; on the 27s it's the reverse. Y/Z run northbound, W/X southbound</span>
@@ -988,7 +1037,10 @@ const ATC = {};
 
   A.Sim = class {
     constructor(o) {
-      this.o = Object.assign({ density: 'medium', seed: (Date.now() % 1e9), timeScale: 144 }, o || {});
+      this.o = Object.assign({ density: 'medium', seed: (Date.now() % 1e9), timeScale: 144, mode: 'endless' }, o || {});
+      // competition: starts at heavy traffic, +10% traffic every 5 minutes, shift ends when the score goes negative
+      if (this.o.mode === 'comp') this.o.density = 'heavy';
+      this.mult = 1; this.peak = 0; this.over = false;
       this.rng = A.rng(this.o.seed);
       // map + runway configuration picked once per shift; weather and time of day run on their own
       this.ap = A.buildAirport(this.o.map || 'single'); this.N = this.ap.nodes; this.elev = this.ap.elev;
@@ -1229,6 +1281,24 @@ const ATC = {};
       this.say('sys', ac || null, `⚠ ${kind}: ${text} (−${pts})`, 'bad');
     }
     award(pts) { this.score.pts += pts; }
+    // an aircraft held up anywhere but its gate or parking spot: −30 for every 3 minutes it waits
+    isWaiting(ac) {
+      if (ac.removed || ac.phase === 'parked' || ac.phase === 'parkedArr') return false;
+      if (ac.req) return true;
+      if (!ac.onGround) return false;
+      if (['hs', 'stopped', 'luaw'].includes(ac.phase)) return true;
+      return ['taxi', 'push', 'exiting', 'lineup'].includes(ac.phase) && ac.spd < 0.5;
+    }
+    delays(dt) {
+      for (const ac of this.acs) {
+        if (!this.isWaiting(ac)) { ac.waitT = 0; continue; }
+        ac.waitT = (ac.waitT || 0) + dt;
+        if (ac.waitT >= 180) {
+          ac.waitT = 0; this.score.delays = (this.score.delays || 0) + 1;
+          this.incident('Delay', `${ac.cs} has been waiting 3 minutes (${this.status(ac)})`, 30, ac);
+        }
+      }
+    }
 
     /* ---------------- aircraft creation ---------------- */
     makeAc(spec, props) {
@@ -1392,10 +1462,14 @@ const ATC = {};
     scheduler(dt) {
       const exp = (perHr) => perHr > 0 ? -Math.log(1 - this.rng()) * 3600 / perHr : 1e9;
       const n = this.next;
-      const arrHr = this.dens.arrHr * (this.ends.length > 1 ? 1.5 : 1);
-      if (this.t >= n.arr) { n.arr = this.spawnArrival() ? this.t + Math.max(45, exp(arrHr)) : this.t + 10; }
+      if (this.o.mode === 'comp') {
+        const lvl = Math.floor(this.t / 300), m = Math.pow(1.1, lvl);
+        if (m > this.mult + 1e-9) { this.mult = m; this.sys(`Traffic up 10% — now ${Math.round(m * 100)}% of heavy`); }
+      }
+      const arrHr = this.dens.arrHr * (this.ends.length > 1 ? 1.5 : 1) * this.mult;
+      if (this.t >= n.arr) { n.arr = this.spawnArrival() ? this.t + Math.max(45 / this.mult, exp(arrHr)) : this.t + 10; }
       // no departures appear out of thin air: every departure is an aircraft already parked at a gate or spot
-      if (this.t >= n.vin) { n.vin = (this.wx.vfr && this.dens.vinHr > 0 && this.spawnVfrIn()) ? this.t + Math.max(120, exp(this.dens.vinHr)) : this.t + 60; }
+      if (this.t >= n.vin) { n.vin = (this.wx.vfr && this.dens.vinHr > 0 && this.spawnVfrIn()) ? this.t + Math.max(120 / this.mult, exp(this.dens.vinHr * this.mult)) : this.t + 60; }
       for (const r of this.requeue) if (!r.done && this.t >= r.t) { if (this.spawnArrival(r.spec)) r.done = true; else r.t = this.t + 15; }
     }
 
@@ -1413,7 +1487,9 @@ const ATC = {};
         if (!ac.removed && this.t - (ac.histT || -9) > 4) { ac.histT = this.t; ac.hist.push({ x: ac.x, y: ac.y }); if (ac.hist.length > 6) ac.hist.shift(); }
       }
       this._chk = (this._chk || 0) + dt;
-      if (this._chk > 0.5) { this._chk = 0; this.conflicts(); }
+      if (this._chk > 0.5) { const k = this._chk; this._chk = 0; this.conflicts(); this.delays(k); }
+      this.peak = Math.max(this.peak, this.score.pts);
+      if (this.o.mode === 'comp' && !this.over && this.score.pts < 0) { this.over = true; this.overT = this.t; this.sys('Score below zero — shift over.'); }
       if (this.acs.some(a => a.removed)) this.acs = this.acs.filter(a => !a.removed);
     }
     update(ac, dt) {
@@ -1669,7 +1745,7 @@ const ATC = {};
           if (g) { g.occ = ac.id; g.res = null; }
           this.award(5);
           const T = ac.T;
-          const dur = T.wake === 'H' ? this.rng.range(600, 900) : T.ga ? this.rng.range(240, 600) : this.rng.range(360, 720);
+          const dur = (T.wake === 'H' ? this.rng.range(600, 900) : T.ga ? this.rng.range(240, 600) : this.rng.range(360, 720)) / this.mult;
           ac.turnUntil = this.t + dur; ac.parkNode = dest.node;
           this.later(dur, () => this.turnaround(ac));
         } else ac.phase = 'stopped';
@@ -2694,12 +2770,13 @@ const ATC = {};
     const fbm = (x, y) => { let v = 0, amp = 0.5, f = 1; for (let o = 0; o < 4; o++) { v += amp * vnoise(x * f, y * f); f *= 2.03; amp *= 0.5; } return v / 0.9375; };
     // mountains: an east-west valley (the runways sit on its floor) between two ranges
     const yc = x => 2000 + 2500 * Math.sin(x / 38000), vw = x => 12000 + 3500 * Math.sin(x / 21000 + 1.3);
+    // ridged multifractal: sharp crests and branching drainages
+    const ridged = (x, y) => { let v = 0, amp = 0.55, f = 1, w = 1; for (let o = 0; o < 5; o++) { let n = 1 - Math.abs(vnoise(x * f + o * 17.3, y * f - o * 9.1) * 2 - 1); n *= n; n *= w; w = A.clamp(n * 1.8, 0, 1); v += n * amp; f *= 2.07; amp *= 0.5; } return v; };
     const height = (x, y) => {
-      const t = (Math.abs(y - yc(x)) - vw(x)) / 15000;
+      const t = (Math.abs(y - yc(x)) - vw(x)) / 14000;
       if (t <= 0) return 0;
-      const m = t < 1 ? t * t * (3 - 2 * t) : 1 + (t - 1) * 0.35;
-      const ridge = 1 - Math.abs(fbm(x / 9000, y / 9000) * 2 - 1);
-      return m * (4200 * (0.4 + fbm(x / 14000 + 7, y / 14000)) + 2400 * ridge);
+      const m = t < 1 ? t * t * (3 - 2 * t) : 1 + (t - 1) * 0.3;
+      return m * (1600 + 6800 * ridged(x / 17000 + 3, y / 17000) + 900 * fbm(x / 4200, y / 4200));
     };
     // coast: open water east of a gently curving shoreline
     const coastX = y => 11000 + 2600 * Math.sin(y / 16000 + 0.7) + 900 * Math.sin(y / 4700);
@@ -2886,33 +2963,45 @@ const ATC = {};
     }
 
     if (theme === 'mountains') {
-      // shaded relief, one cell every 1,200 ft; the valley floor is left to the fields
-      const cell = 800, lim = EXT * 1.3, nx = Math.ceil(2 * lim / cell);
+      // shaded relief on a 250 ft grid (smoothly upscaled when drawn); the valley floor is left to the fields
+      const cell = 250, lim = EXT * 1.15, nx = Math.ceil(2 * lim / cell);
       const T = { x0: -lim, y0: -lim, cell, nx, ny: nx, px: new Uint8ClampedArray(nx * nx * 4) };
-      const stops = [[0, [88, 106, 62]], [400, [72, 94, 54]], [1400, [46, 70, 41]], [3600, [50, 66, 46]], [5200, [98, 94, 82]], [6800, [128, 123, 112]], [7800, [196, 201, 206]], [8800, [236, 239, 242]]];
-      const ramp = h => { for (let i = 1; i < stops.length; i++) if (h <= stops[i][0]) { const [h0, a] = stops[i - 1], [h1, b] = stops[i], t = (h - h0) / (h1 - h0); return a.map((v, k) => v + (b[k] - v) * t); } return stops[stops.length - 1][1]; };
-      const L = [-0.55, 0.55, 0.63];
+      const H = new Float32Array(nx * nx);
+      for (let j = 0; j < nx; j++) for (let i = 0; i < nx; i++) H[j * nx + i] = height(T.x0 + (i + 0.5) * cell, T.y0 + (j + 0.5) * cell);
+      const at = (i, j) => H[A.clamp(j, 0, nx - 1) * nx + A.clamp(i, 0, nx - 1)];
+      const mix = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+      const C = { meadow: [104, 122, 70], forest: [38, 64, 38], forest2: [52, 78, 44], scree: [118, 110, 96], rock: [132, 126, 116], tundra: [116, 118, 84], snow: [242, 245, 248] };
+      const Lx = -0.5, Ly = 0.5, Lz = 0.707; // sun from the north-west, 45° up
       for (let j = 0; j < nx; j++) for (let i = 0; i < nx; i++) {
-        const x = T.x0 + (i + 0.5) * cell, y = T.y0 + (j + 0.5) * cell, h = height(x, y);
-        const o = (j * nx + i) * 4;
-        if (h < 60) { T.px[o + 3] = 0; continue; }
-        const gx = (height(x + 400, y) - height(x - 400, y)) / 800, gy = (height(x, y + 400) - height(x, y - 400)) / 800;
-        const n = Math.hypot(gx, gy, 1), dot = (-gx * L[0] - gy * L[1] + L[2]) / n;
-        const k = A.clamp(0.5 + 0.7 * dot, 0.4, 1.25), col = ramp(h);
-        T.px[o] = col[0] * k; T.px[o + 1] = col[1] * k; T.px[o + 2] = col[2] * k; T.px[o + 3] = Math.min(255, h * 2.5);
+        const o = (j * nx + i) * 4, h = H[j * nx + i];
+        if (h < 40) { T.px[o + 3] = 0; continue; }
+        const x = T.x0 + (i + 0.5) * cell, y = T.y0 + (j + 0.5) * cell;
+        const gx = (at(i + 1, j) - at(i - 1, j)) / (2 * cell), gy = (at(i, j + 1) - at(i, j - 1)) / (2 * cell);
+        const slope = Math.hypot(gx, gy), ex = 1.7, nz = 1 / Math.hypot(gx * ex, gy * ex, 1);
+        const dot = (-gx * ex * Lx - gy * ex * Ly + Lz) * nz;
+        // ambient occlusion from the local hollow
+        const ao = A.clamp(1 + ((at(i - 3, j) + at(i + 3, j) + at(i, j - 3) + at(i, j + 3)) / 4 - h) / -900, 0.75, 1.08);
+        const nz2 = vnoise(x / 700, y / 700), treeline = 4600 + 900 * (nz2 - 0.5), snowline = 6900 + 1100 * (vnoise(x / 5000, y / 5000) - 0.5);
+        // smooth bands: meadow → forest → alpine rock → snow, with ragged edges
+        const sm = (a, b, v) => { const t = A.clamp((v - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+        let col = mix(C.meadow, mix(C.forest, C.forest2, nz2), sm(150, 900, h + (nz2 - 0.5) * 500));
+        col = mix(col, mix(C.tundra, C.rock, sm(treeline, treeline + 1600, h)), sm(treeline - 350, treeline + 350, h));
+        const snowK = sm(snowline - 250, snowline + 350, h + (vnoise(x / 400, y / 400) - 0.5) * 500) * (1 - sm(0.9, 1.4, slope));
+        if (h > 1800) col = mix(col, C.scree, sm(0.7, 1.2, slope) * 0.8);
+        col = mix(col, C.snow, snowK);
+        const isSnow = snowK > 0.5;
+        const tex = 0.9 + 0.2 * vnoise(x / 260, y / 260);
+        const lit = A.clamp(0.42 + 0.78 * dot, 0.28, 1.22) * ao * (isSnow ? 1 : tex);
+        const blue = isSnow ? A.clamp((0.9 - dot) * 40, 0, 30) * snowK : 0; // snow in shadow goes blue
+        T.px[o] = col[0] * lit - blue * 0.5; T.px[o + 1] = col[1] * lit - blue * 0.2; T.px[o + 2] = col[2] * lit + blue;
+        T.px[o + 3] = Math.min(255, h * 4);
       }
       S.terrain = T;
-      // conifer forest on the lower slopes
-      for (let i = 0; i < 9000; i++) {
-        const x = R.range(-EXT * 0.75, EXT * 0.75), y = R.range(-EXT * 0.75, EXT * 0.75), h = height(x, y);
-        if (h < 200 || h > 3800 || blocked(x, y, 400)) continue;
-        S.trees.push({ x, y, r: R.range(22, 40), c: R.pick(['#1f3420', '#24402a', '#2a4626']) });
-      }
-      // foothill pines along the valley edges
-      for (let i = 0; i < 2500; i++) {
-        const x = R.range(-EXT, EXT), sg = R.chance(0.5) ? 1 : -1, y = yc(x) + sg * (vw(x) - R.range(0, 2500));
-        if (blocked(x, y, 400) || inWater(x, y) || inCity(x, y, city, 1.1)) continue;
-        S.trees.push({ x, y, r: R.range(20, 34), c: R.pick(['#22392a', '#294530']) });
+      // scattered conifers along the lower slopes and valley edges (visible zoomed in)
+      for (let i = 0; i < 4000; i++) {
+        const x = R.range(-EXT * 0.6, EXT * 0.6), sg = R.chance(0.5) ? 1 : -1, y = yc(x) + sg * (vw(x) + R.range(-1500, 5000)), h = height(x, y);
+        if (h < 20 || h > 3000 || blocked(x, y, 400) || inWater(x, y) || inCity(x, y, city, 1.1)) continue;
+        for (let k = 0; k < 4; k++) S.trees.push({ x: x + R.range(-160, 160), y: y + R.range(-160, 160), r: R.range(18, 30), c: R.pick(['#1d331f', '#233d25', '#2a4528']) });
       }
     }
     if (theme === 'coast') {
@@ -3653,6 +3742,50 @@ const ATC = {};
 })(ATC);
 
 /* ==========================================================================
+   Leaderboard: one board per map. Global through Supabase's REST API when
+   window.LC_LEADERBOARD = { url, key } is filled in; otherwise kept in this
+   browser only.
+   ========================================================================== */
+(function (A) {
+  const LS = 'lc_scores_v1';
+  const cfg = () => (typeof window !== 'undefined' && window.LC_LEADERBOARD) || {};
+  const loadLocal = () => { try { return JSON.parse(localStorage.getItem(LS) || '[]'); } catch (e) { return []; } };
+  const saveLocal = L => { try { localStorage.setItem(LS, JSON.stringify(L.slice(-300))); } catch (e) { /* storage unavailable */ } };
+  const clean = n => String(n || '').replace(/[\u0000-\u001f<>]/g, '').trim().slice(0, 20);
+  A.Board = {
+    global() { const c = cfg(); return !!(c.url && c.key); },
+    headers() {
+      const k = cfg().key, h = { apikey: k, 'Content-Type': 'application/json' };
+      if (/^eyJ/.test(k)) h.Authorization = 'Bearer ' + k; // legacy anon keys are JWTs
+      return h;
+    },
+    base() { return cfg().url.replace(/\/+$/, '') + '/rest/v1/scores'; },
+    async top(map, n = 15) {
+      if (this.global()) {
+        const r = await fetch(`${this.base()}?select=name,score,minutes,traffic,landed,departed,created_at&map=eq.${encodeURIComponent(map)}&order=score.desc,created_at.asc&limit=${n}`, { headers: this.headers() });
+        if (!r.ok) throw new Error(`leaderboard ${r.status}`);
+        return r.json();
+      }
+      return loadLocal().filter(e => e.map === map).sort((a, b) => b.score - a.score || a.created_at.localeCompare(b.created_at)).slice(0, n);
+    },
+    async submit(e) {
+      const row = { map: e.map, name: clean(e.name), score: Math.max(0, Math.round(e.score)), minutes: Math.max(0, Math.round(e.minutes)), traffic: Math.round(e.traffic), landed: e.landed | 0, departed: e.departed | 0 };
+      const L = loadLocal(); L.push(Object.assign({ created_at: new Date().toISOString() }, row)); saveLocal(L);
+      if (!this.global()) return { global: false, row };
+      const r = await fetch(this.base(), { method: 'POST', headers: Object.assign({ Prefer: 'return=minimal' }, this.headers()), body: JSON.stringify(row) });
+      if (!r.ok) throw new Error(`leaderboard ${r.status}`);
+      return { global: true, row };
+    },
+    table(rows, me) {
+      if (!rows.length) return '<div class="empty small">No scores yet — be the first.</div>';
+      const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+      return `<table class="lb"><tr><th>#</th><th>Name</th><th class="n">Score</th><th class="n">Time</th><th class="n">Traffic</th><th class="n">LDG/DEP</th><th>Date</th></tr>${rows.map((r, i) =>
+        `<tr class="${me && r.score === me.score && (r.name || '') === (me.name || '') ? 'me' : ''}"><td>${i + 1}</td><td>${esc(r.name || '—')}</td><td class="n">${r.score}</td><td class="n">${r.minutes} min</td><td class="n">${r.traffic}%</td><td class="n">${r.landed}/${r.departed}</td><td>${(r.created_at || '').slice(0, 10)}</td></tr>`).join('')}</table>`;
+    },
+  };
+})(ATC);
+
+/* ==========================================================================
    UI: layout, strips, context panel, command line, radio log, voice
    ========================================================================== */
 (function (A) {
@@ -3670,10 +3803,23 @@ const ATC = {};
       $('#startBtn').onclick = () => this.start();
       $('#helpBtn').onclick = () => this.modal('#help', true);
       $('#reportBtn').onclick = () => { this.renderReport(); this.modal('#report', true); };
-      $('#newBtn').onclick = () => { this.paused = true; this.showStart(); };
+      $('#newBtn').onclick = () => {
+        if (this.comp && this.sim && !this.sim.over && !confirm('Abandon this competition shift? It will not be recorded.')) return;
+        this.paused = true; this.syncTop(); this.showStart();
+      };
+      $('#boardBtn').onclick = () => this.showBoard();
+      $('#overNew').onclick = () => { this.modal('#over', false); this.showStart(); };
+      $('#overReport').onclick = () => { this.renderReport(); this.modal('#report', true); };
+      const syncMode = () => {
+        const comp = (document.querySelector('input[name=mode]:checked') || {}).value === 'comp';
+        $('#densOpt').style.display = comp ? 'none' : ''; $('#compName').style.display = comp ? '' : 'none';
+      };
+      document.querySelectorAll('input[name=mode]').forEach(r => r.onchange = syncMode);
+      try { $('#pname').value = localStorage.getItem('lc_name') || ''; } catch (e) { /* no storage */ }
+      syncMode();
       document.querySelectorAll('[data-close]').forEach(b => b.onclick = () => this.modal('#' + b.dataset.close, false));
       $('#pauseBtn').onclick = () => this.togglePause();
-      document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { this.speed = +b.dataset.speed; this.syncTop(); });
+      document.querySelectorAll('[data-speed]').forEach(b => b.onclick = () => { if (this.comp) return; this.speed = +b.dataset.speed; this.syncTop(); });
       $('#tagsBtn').onclick = () => { const m = ['all', 'air', 'off']; this.r.opts.tags = m[(m.indexOf(this.r.opts.tags) + 1) % 3]; this.syncTop(); };
       $('#guideBtn').onclick = () => { this.r.opts.guide = !this.r.opts.guide; this.syncTop(); };
       $('#voiceBtn').onclick = () => { this.voice = !this.voice; if (!this.voice && window.speechSynthesis) speechSynthesis.cancel(); this.syncTop(); };
@@ -3718,7 +3864,7 @@ const ATC = {};
       document.querySelectorAll('#mtabs [data-tab]').forEach(btn => btn.onclick = () => this.setTab(btn.dataset.tab, true));
       $('#nextReq').onclick = () => { this.nextRequest(); };
       $('#menuBtn').onclick = e => { document.body.classList.toggle('menu-open'); e.stopPropagation(); };
-      $('#speedCycle').onclick = () => { this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 4 : 1; this.syncTop(); };
+      $('#speedCycle').onclick = () => { if (this.comp) return; this.speed = this.speed === 1 ? 2 : this.speed === 2 ? 4 : 1; this.syncTop(); };
       document.addEventListener('click', e => { if (!e.target.closest('#moreMenu') && e.target.id !== 'menuBtn') document.body.classList.remove('menu-open'); });
       document.querySelectorAll('#moreMenu .tbtn').forEach(b => b.addEventListener('click', () => setTimeout(() => document.body.classList.remove('menu-open'), 50)));
       // keep canvases sized to their boxes whatever the layout does
@@ -3747,7 +3893,10 @@ const ATC = {};
     showStart() { this.modal('#start', true); }
     start() {
       const v = n => (document.querySelector(`input[name=${n}]:checked`) || {}).value;
-      const opts = { density: v('dens'), map: v('map') || 'single' };
+      const mode = v('mode') || 'endless';
+      this.comp = mode === 'comp'; this.overShown = false; this.modal('#over', false);
+      if (this.comp) { this.pname = ($('#pname').value || '').trim().slice(0, 20); try { localStorage.setItem('lc_name', this.pname); } catch (e) { /* no storage */ } }
+      const opts = { density: this.comp ? 'heavy' : v('dens'), map: v('map') || 'single', mode };
       this.sim = new A.Sim(opts);
       const cv = $('#view');
       if (!this.r) {
@@ -3763,7 +3912,7 @@ const ATC = {};
       this.sel = null; this.r.sel = null; this.panelKey = ''; this.wtimers = [];
       $('#log').innerHTML = '';
       this.modal('#start', false);
-      this.paused = false; this.speed = 1;
+      this.paused = false; this.speed = 1; document.body.classList.remove('comp-paused');
       this.r.resize(); this.b.resize();
       this.setView(this.mobile && window.innerHeight > window.innerWidth ? 'field' : 'pattern');
       const w = this.sim.wx;
@@ -3855,6 +4004,7 @@ const ATC = {};
         const step = 1 / 30; let n = 0;
         while (this.acc >= step && n < 40) { this.sim.tick(step); this.acc -= step; n++; }
       }
+      if (this.sim && this.sim.over && !this.overShown) { this.overShown = true; this.paused = true; this.drain(); this.gameOver(); }
       if (this.sim) {
         this.drain();
         if (this.sel && !this.sim.byId(this.sel)) this.select(null);
@@ -3924,6 +4074,35 @@ const ATC = {};
       $('#guideBtn').classList.toggle('on', this.r.opts.guide);
       $('#voiceBtn').classList.toggle('on', this.voice);
       $('#pausedBanner').style.display = this.paused ? 'block' : 'none';
+      $('#compTk').style.display = this.comp ? '' : 'none';
+      if (this.comp) $('#compLvl').textContent = Math.round(s.mult * 100) + '%';
+      document.body.classList.toggle('comp-paused', !!(this.comp && this.paused && !s.over));
+      document.querySelectorAll('[data-speed]').forEach(b => { b.disabled = this.comp && +b.dataset.speed !== 1; });
+    }
+    /* ---------- competition end + leaderboards ---------- */
+    async gameOver() {
+      const s = this.sim, mapKey = s.ap.key, mins = Math.round(s.t / 60);
+      const entry = { map: mapKey, name: this.pname || '', score: Math.max(0, Math.round(s.peak)), minutes: mins, traffic: Math.round(s.mult * 100), landed: s.score.landed, departed: s.score.departed };
+      $('#overSub').textContent = `${s.ap.icao} · ${A.MAP_INFO[mapKey].name}`;
+      $('#overStats').innerHTML = [['Best score', entry.score], ['Final score', s.score.pts], ['Time on position', `${mins} min`], ['Traffic reached', `${entry.traffic}% of heavy`], ['Landed / departed', `${entry.landed} / ${entry.departed}`], ['Delays (3 min)', s.score.delays || 0]].map(r => `<div>${r[0]}</div><b>${r[1]}</b>`).join('');
+      $('#overSaved').textContent = 'Saving score…'; $('#overBoard').innerHTML = '';
+      this.modal('#over', true); this.syncTop();
+      try {
+        const res = await A.Board.submit(entry);
+        $('#overSaved').textContent = res.global ? `Best score ${entry.score} posted to the ${s.ap.icao} leaderboard${entry.name ? ` as ${entry.name}` : ''}.` : `Best score ${entry.score} saved in this browser (the global leaderboard isn't set up yet).`;
+      } catch (e) { $('#overSaved').textContent = `Couldn't reach the global leaderboard (${e.message}); the score was saved in this browser.`; }
+      try { $('#overBoard').innerHTML = A.Board.table(await A.Board.top(mapKey, 10), entry); }
+      catch (e) { $('#overBoard').innerHTML = ''; }
+    }
+    async showBoard(mapKey) {
+      mapKey = mapKey || (document.querySelector('input[name=map]:checked') || {}).value || 'single';
+      $('#btabs').innerHTML = Object.entries(A.MAP_INFO).map(([k, m]) => `<button data-bmap="${k}" class="${k === mapKey ? 'on' : ''}">${m.icao} · ${m.name}</button>`).join('');
+      $('#btabs').querySelectorAll('button').forEach(b => b.onclick = () => this.showBoard(b.dataset.bmap));
+      $('#boardNote').textContent = A.Board.global() ? 'Competition mode, ranked by best score reached during the shift.' : 'Global leaderboard not set up — showing scores from this browser only.';
+      $('#boardBody').innerHTML = '<div class="empty small">Loading…</div>';
+      this.modal('#board', true);
+      try { $('#boardBody').innerHTML = A.Board.table(await A.Board.top(mapKey, 15)); }
+      catch (e) { $('#boardBody').innerHTML = `<div class="empty small">Couldn't load the leaderboard (${e.message}).</div>`; }
     }
 
     drawClock() {
