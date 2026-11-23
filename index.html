@@ -56,6 +56,7 @@ kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--line);border-b
 .ph b{font-family:var(--mono);font-size:18px;color:var(--yellow)}
 .fr{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:3px;margin-left:6px;vertical-align:3px;border:1px solid}
 .fr.IFR{color:var(--green);border-color:#2f6b42} .fr.VFR{color:#e8ecf1;border-color:#4f5b68}
+.dd{display:inline-block;font:600 10px/1 var(--mono,monospace);color:#ffd36b;border:1px solid #7a6324;border-radius:3px;padding:2px 4px;margin-right:6px;letter-spacing:.04em}
 .pt{color:var(--dim);font-size:11px;margin-top:2px}
 .ps{font-family:var(--mono);margin-top:6px;color:var(--cyan)}
 .preq{margin-top:6px;padding:6px 8px;border-left:3px solid var(--amber);background:rgba(255,179,60,.07);color:#ffd9a0;font-size:12px}
@@ -266,8 +267,8 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
   <h3>Airport</h3>
   <div class="maps">
     <label><input type="radio" name="map" value="single" checked><span><b>KTTR · Single runway</b><em>9/27 · GA field, about 80% GA. Busy closed traffic, two runway crossings to the FBO.</em></span></label>
-    <label><input type="radio" name="map" value="parallel"><span><b>KTTP · Parallel runways</b><em>9L/27R &amp; 9R/27L · airline hub, about 80% airline. 12 gates between the runways.</em></span></label>
-    <label><input type="radio" name="map" value="cross"><span><b>KTTX · Crossing runways</b><em>9/27 × 18/36 · even airline/GA mix. Intersecting-runway separation.</em></span></label>
+    <label><input type="radio" name="map" value="parallel"><span><b>KTTP · Parallel runways</b><em>9L/27R &amp; 9R/27L in a mountain valley · airline hub, about 80% airline. 12 gates between the runways.</em></span></label>
+    <label><input type="radio" name="map" value="cross"><span><b>KTTX · Crossing runways</b><em>9/27 × 18/36 on the coast · even airline/GA mix. Intersecting-runway separation and LAHSO.</em></span></label>
   </div>
   <div class="opts">
     <div><h3>Traffic</h3><div class="og"><label><input type="radio" name="dens" value="light"><span>Light</span></label><label><input type="radio" name="dens" value="medium" checked><span>Medium</span></label><label><input type="radio" name="dens" value="heavy"><span>Heavy</span></label></div></div>
@@ -312,6 +313,9 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <b>Dep behind arrival</b><span>Arrival must be off the runway before the roll</span>
     <b>Crossing runways</b><span>Traffic on the intersecting runway must be past the intersection before a departure rolls or an arrival crosses the threshold</span>
     <b>Go-arounds</b><span>A go-around flying over the runway doesn't count against SRS</span>
+    <b>LAHSO</b><span>On KTTX, "Land, hold short" appears when the arrival can stop and turn off before the crossing runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). A LAHSO arrival and traffic on the crossing runway don't have to wait for each other; the hold-short point shows as a dashed bar</span>
+    <b>Departure direction</b><span>Departure strips show the direction of flight and destination (e.g. SE · ATL) — on KTTP send southbound traffic to the south runway and northbound traffic to the north one</span>
+    <b>One-way taxiways</b><span>Yellow arrows show one-way taxiways. The ramp exits flip with the runway flow: on the 9s D (and G on KTTP) is out and E (and H) is in; on the 27s it's the reverse. Y/Z run northbound, W/X southbound</span>
   </div><div class="sep">
     <b>Departure wake</b><span>2 min behind a Heavy (S/L), 2 min Small behind B757, 3 min intersection</span>
     <b>Arrival wake</b><span>Behind Heavy: H 4 · L 5 · S 6 nm. Small behind B757: 4 nm</span>
@@ -605,24 +609,27 @@ const ATC = {};
       { kind: 'hangar', pts: [[2850, -1560], [3350, -1560], [3350, -1780], [2850, -1780]] },
       { kind: 'hangar', pts: [[1050, -1560], [1650, -1560], [1650, -1760], [1050, -1760]] },
     ];
-    ap.configs = [{ ends: ['27'], arr: ['27'], vfr: ['27'] }, { ends: ['9'], arr: ['9'], vfr: ['9'] }];
+    // one-way ramp exits flip with the flow: 27 → E out / D in, 9 → D out / E in
+    ap.configs = [{ ends: ['27'], arr: ['27'], vfr: ['27'], oneWay: { D: 1, E: -1 } }, { ends: ['9'], arr: ['9'], vfr: ['9'], oneWay: { D: -1, E: 1 } }];
     return ap.finish();
   };
   /* ---------------- KTTP: parallel runways, airline hub ---------------- */
   MAPS.parallel = () => {
-    const ap = Builder({ key: 'parallel', name: 'Tower Trainer Intl', icao: 'KTTP', elev: 650, tower: { x: 0, y: 2280 },
+    const ap = Builder({ key: 'parallel', name: 'Tower Trainer Intl', icao: 'KTTP', elev: 4850, theme: 'mountains', tower: { x: 0, y: 2280 },
       gaShare: 0.2, patMax: 1, fbo: { x: 2300, y: -1300 }, terminal: { x: 0, y: 2250 } });
     const R1 = ap.runway('9R', '27L', { x: -5000, y: 0 }, { x: 5000, y: 0 }, 150, 'R', 'L');
     const R2 = ap.runway('9L', '27R', { x: -4500, y: 4000 }, { x: 4500, y: 4000 }, 150, 'L', 'R');
-    ap.laneX('A', 'A', 500, [5000, 4200, 3600, 3300, 3000, 2000, 1366, 1000, -1000, -1366, -3000, -3600, -4200, -5000]);
+    ap.laneX('A', 'A', 500, [5000, 4700, 4200, 3600, 3300, 3000, 2000, 1366, 1000, -1000, -1366, -3000, -3600, -4200, -4700, -5000]);
     for (const [n, x] of [['A1', 5000], ['A2', 3000], ['A3', 1000], ['A4', -1000], ['A5', -3000], ['A6', -5000]]) ap.conn(n, R1, x, 0, 'A' + x);
     ap.conn('J', R1, 500, 0, 'A1366', { rapid: true });
     ap.conn('K', R1, -500, 0, 'A-1366', { rapid: true });
-    ap.laneX('B', 'B', 3500, [4500, 4200, 3600, 2250, 1866, 0, -1866, -2250, -3600, -4200, -4500]);
+    ap.laneX('B', 'B', 3500, [4700, 4500, 4200, 3600, 2250, 1866, 0, -1866, -2250, -3600, -4200, -4500, -4700]);
     for (const [n, x] of [['B1', 4500], ['B2', 2250], ['B3', 0], ['B4', -2250], ['B5', -4500]]) ap.conn(n, R2, x, 4000, 'B' + x);
     ap.conn('N', R2, 1000, 4000, 'B1866', { rapid: true });
     ap.conn('M', R2, -1000, 4000, 'B-1866', { rapid: true });
-    ap.TW('Y', ['A-4200', 'B-4200']); ap.TW('Z', ['A4200', 'B4200']);
+    // paired one-way links between the parallels: Y / Z northbound, W / X southbound
+    ap.TW('Y', ['A-4200', 'B-4200'], { oneWay: 1 }); ap.TW('W', ['A-4700', 'B-4700'], { oneWay: -1 });
+    ap.TW('Z', ['A4200', 'B4200'], { oneWay: 1 }); ap.TW('X', ['A4700', 'B4700'], { oneWay: -1 });
     const gx = [-2500, -1500, -500, 500, 1500, 2500];
     ap.laneX('T', 'T', 1400, [-3600, 3600, ...gx.flatMap(x => [x, x - 200, x + 200])], { ramp: true });
     ap.laneX('U', 'U', 3100, [-3600, 3600, ...gx.flatMap(x => [x, x - 200, x + 200])], { ramp: true });
@@ -640,12 +647,16 @@ const ATC = {};
       { kind: 'terminal', pts: [[-3000, 1950], [3000, 1950], [3000, 2550], [-3000, 2550]], label: 'TERMINAL' },
       { kind: 'hangar', pts: [[1700, -1560], [2500, -1560], [2500, -1820], [1700, -1820]], label: 'FBO' },
     ];
-    ap.configs = [{ ends: ['27L', '27R'], arr: ['27R', '27L'], vfr: ['27L'] }, { ends: ['9R', '9L'], arr: ['9L', '9R'], vfr: ['9R'] }];
+    // one-way ramp exits flip with the flow: west flow (27s) E/H out, D/G in; east flow (9s) D/G out, E/H in
+    ap.configs = [
+      { ends: ['27L', '27R'], arr: ['27R', '27L'], vfr: ['27L'], oneWay: { D: 1, G: 1, E: -1, H: -1 } },
+      { ends: ['9R', '9L'], arr: ['9L', '9R'], vfr: ['9R'], oneWay: { D: -1, G: -1, E: 1, H: 1 } },
+    ];
     return ap.finish();
   };
   /* ---------------- KTTX: crossing runways ---------------- */
   MAPS.cross = () => {
-    const ap = Builder({ key: 'cross', name: 'Tower Trainer Municipal', icao: 'KTTX', elev: 720, tower: { x: 150, y: 2050 },
+    const ap = Builder({ key: 'cross', name: 'Tower Trainer Municipal', icao: 'KTTX', elev: 20, theme: 'coast', tower: { x: 150, y: 2050 },
       gaShare: 0.5, patMax: 2, fbo: { x: 2900, y: -1300 }, terminal: { x: -1900, y: 1700 } });
     const R1 = ap.runway('9', '27', { x: -4500, y: 0 }, { x: 4500, y: 0 }, 150, 'R', 'L');
     const R2 = ap.runway('18', '36', { x: 1000, y: 4000 }, { x: 1000, y: -3500 }, 150, 'L', 'R');
@@ -659,11 +670,17 @@ const ATC = {};
     delete ap.tw.A1W; delete ap.tw.A1E; delete ap.tw.Ax;
     for (const [n, x] of [['A1', 4500], ['A2', 2500], ['A3', -500], ['A4', -2500], ['A5', -4500]]) ap.conn(n, R1, x, 0, 'A' + x);
     ap.conn('L', R1, -1300, 0, 'A-2166', { rapid: true });
-    // B parallels 18/36 north of 9/27 (west side)
-    ap.laneY('B', 'B', 500, [500, 1200, 2500, 2666, 4000]);
-    ap.TW('B', ['A500', ...ap.tw.B.nodes.filter(n => n !== 'B500')]); delete ap.nodes.B500;
-    ap.conn('B1', R2, 1000, 4000, 'B4000'); ap.conn('B2', R2, 1000, 2500, 'B2500'); ap.conn('B3', R2, 1000, 1200, 'B1200');
+    // B parallels 18/36 along its whole length on the west side, crossing 9/27; B3 leads straight onto the terminal ramp
+    ap.laneY('Bn', 'B', 500, [1300, 2500, 2666, 4000]);
+    ap.laneY('Bs', 'B', 500, [-3500, -2000, -1666, -500]);
+    ap.crossing('Bx', R1, 'B-500', 'A500');
+    ap.add('T500', 500, 1300);
+    ap.TW('B', [...ap.tw.Bs.nodes, ...ap.tw.Bx.nodes.slice(1), 'T500', ...ap.tw.Bn.nodes.filter(n => n !== 'B1300')]);
+    delete ap.tw.Bn; delete ap.tw.Bs; delete ap.tw.Bx; delete ap.nodes.B1300;
+    ap.conn('B1', R2, 1000, 4000, 'B4000'); ap.conn('B2', R2, 1000, 2500, 'B2500'); ap.conn('B3', R2, 1000, 1300, 'T500');
+    ap.conn('B4', R2, 1000, -2000, 'B-2000'); ap.conn('B5', R2, 1000, -3500, 'B-3500');
     ap.conn('J', R2, 1000, 1800, 'B2666', { rapid: true });
+    ap.conn('M', R2, 1000, -900, 'B-1666', { rapid: true });
     // GA ramp south-east, H parallels 18/36 south of 9/27 (east side)
     const spotX = [1900, 2200, 2500, 3400, 3700, 4000];
     ap.laneX('S', 'S', -1100, [1500, 3000, 4200, ...spotX], { ramp: true });
@@ -674,18 +691,19 @@ const ATC = {};
     ap.conn('K', R2, 1000, -800, 'H-1666', { rapid: true });
     ap.crossing('C', R1, 'A3000', 'S3000');
     // terminal apron north-west
-    ap.laneX('T', 'T', 1300, [-3700, -150, ...gx.flatMap(x => [x, x - 200, x + 200])], { ramp: true });
+    ap.laneX('T', 'T', 1300, [-3700, -150, 500, ...gx.flatMap(x => [x, x - 200, x + 200])], { ramp: true });
     gx.forEach((x, i) => ap.gate('G' + (i + 1), x, 1650, 0, 'T', 1300, 200));
     ap.TW('D', ['A-3700', 'T-3700'], { oneWay: 1 }); ap.TW('E', ['A-150', 'T-150'], { oneWay: -1 });
-    ap.aprons = [{ pts: [[-3850, 1180], [0, 1180], [0, 1800], [-3850, 1800]] }, { pts: [[1700, -1000], [4300, -1000], [4300, -1480], [1700, -1480]] }];
+    ap.aprons = [{ pts: [[-3850, 1180], [620, 1180], [620, 1800], [-3850, 1800]] }, { pts: [[1700, -1000], [4300, -1000], [4300, -1480], [1700, -1480]] }];
     ap.buildings = [
       { kind: 'terminal', pts: [[-3550, 1800], [-300, 1800], [-300, 2060], [-3550, 2060]], label: 'TERMINAL' },
       { kind: 'hangar', pts: [[2700, -1560], [3300, -1560], [3300, -1820], [2700, -1820]], label: 'FBO' },
       { kind: 'hangar', pts: [[3500, -1560], [4100, -1560], [4100, -1780], [3500, -1780]] },
     ];
     ap.configs = [
-      { ends: ['27', '36'], arr: ['27', '36'], vfr: ['36'] }, { ends: ['9', '18'], arr: ['9', '18'], vfr: ['18'] },
-      { ends: ['27', '18'], arr: ['27', '18'], vfr: ['18'] }, { ends: ['9', '36'], arr: ['9', '36'], vfr: ['36'] },
+      // ramp exits follow the 9/27 flow: 27 → E out / D in, 9 → D out / E in
+      { ends: ['27', '36'], arr: ['27', '36'], vfr: ['36'], oneWay: { D: 1, E: -1 } }, { ends: ['9', '18'], arr: ['9', '18'], vfr: ['18'], oneWay: { D: -1, E: 1 } },
+      { ends: ['27', '18'], arr: ['27', '18'], vfr: ['18'], oneWay: { D: 1, E: -1 } }, { ends: ['9', '36'], arr: ['9', '36'], vfr: ['36'], oneWay: { D: -1, E: 1 } },
     ];
     return ap.finish();
   };
@@ -956,12 +974,16 @@ const ATC = {};
     fog: { vis: 0.375, ceil: 200, label: 'Fog', cond: 'FG VV002' },
   };
   const CITIES = ['ORD', 'DFW', 'ATL', 'DEN', 'LAX', 'SEA', 'BOS', 'MSP', 'CLT', 'PHX', 'MIA', 'IAH', 'SFO', 'DTW', 'BNA', 'STL'];
+  // rough bearing from the (fictional, mid-continent) field to each destination
+  const CITY_BRG = { ORD: 50, DFW: 195, ATL: 120, DEN: 275, LAX: 250, SEA: 300, BOS: 70, MSP: 10, CLT: 100, PHX: 240, MIA: 140, IAH: 180, SFO: 270, DTW: 60, BNA: 115, STL: 90 };
+  const DIR8 = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  A.dirName = brg => DIR8[Math.round(A.norm(brg) / 45) % 8];
   const PH = {
     parked: 'Parked', push: 'Pushback', taxi: 'Taxi', hs: 'Holding short', lineup: 'Lining up', luaw: 'LUAW',
     takeoff: 'Takeoff roll', climb: 'Departure', pattern: 'Pattern', inbound: 'Inbound', final: 'Final',
     rollout: 'Rollout', exiting: 'Exiting', stopped: 'Holding', missed: 'Missed approach', parkedArr: 'At gate',
   };
-  const KEYWORDS = new Set(['CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
+  const KEYWORDS = new Set(['LAHSO', 'CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
     'EXIT', 'EXP', 'ELD', 'ERD', 'ELB', 'ERB', 'SI', 'LCT', 'RCT', 'MLT', 'MRT', 'ED', 'TB', 'SA', 'L360', 'R360', 'FOLLOW', 'FLW', 'TFC', 'CWT', 'HO', 'CD', 'OC', 'RH', 'EXP']);
 
   A.Sim = class {
@@ -972,6 +994,8 @@ const ATC = {};
       this.ap = A.buildAirport(this.o.map || 'single'); this.N = this.ap.nodes; this.elev = this.ap.elev;
       let cfg = this.rng.pick(this.ap.configs);
       if (this.o.rwy) cfg = this.ap.configs.find(c => c.ends.includes(this.o.rwy)) || cfg;
+      if (cfg.oneWay) for (const [k, v] of Object.entries(cfg.oneWay)) this.ap.tw[k].oneWay = v;
+      this.cfg = cfg;
       if (!this.o.wx) { const r = this.rng(); this.o.wx = r < 0.5 ? 'vmc' : r < 0.75 ? 'mvfr' : r < 0.9 ? 'imc' : 'fog'; }
       this.tod0 = this.o.hour != null ? this.o.hour * 3600 : this.rng.int(0, 23) * 3600 + this.rng.int(0, 59) * 60;
       this.t = 0; this.acs = []; this.outbox = []; this.nextId = 1; this.used = new Set(); this.timers = []; this.requeue = [];
@@ -1231,7 +1255,7 @@ const ATC = {};
       const ac = this.makeAc(spec, { role: 'dep', flight: 'IFR', x: g.x, y: g.y, hdg: 0, phase: 'parked', node: g.node, gate: g.id });
       g.occ = ac.id;
       ac.depOff = this.rng.pick([-40, -30, -20, 0, 0, 20, 30, 40]);
-      ac.destCity = this.rng.pick(CITIES);
+      ac.destCity = this.rng.pick(CITIES); ac.depBrg = CITY_BRG[ac.destCity]; ac.depDir = A.dirName(ac.depBrg);
       this.later(this.rng.range(4, 35), () => this.request(ac, 'push', `Ground, ${ac.say}, gate ${g.id}, request pushback with information ${this.atis}.`));
       return true;
     }
@@ -1277,7 +1301,7 @@ const ATC = {};
       });
       p.occ = ac.id; p.res = null;
       ac.depOff = this.rng.pick([-40, -30, -20, 0, 0, 20, 30, 40]);
-      ac.destCity = this.rng.pick(CITIES);
+      ac.destCity = this.rng.pick(CITIES); ac.depBrg = CITY_BRG[ac.destCity]; ac.depDir = A.dirName(ac.depBrg);
       if (!ifr) {
         ac.pat = this.newPattern(ac); ac.pat.laps = this.rng.int(2, 4);
         if (this.rng.chance(0.35)) { ac.role = 'vdep'; ac.vfrDirName = this.rng.pick(['north', 'south', 'east', 'west']); ac.vfrDir = { north: 0, south: 180, east: 90, west: 270 }[ac.vfrDirName]; }
@@ -1463,7 +1487,7 @@ const ATC = {};
         if (!inO && wO <= 30 && wA <= 30 && (dA < dO - 30 || (Math.abs(dA - dO) <= 30 && ac.id < o.id))) continue; // we're closer: we go
         let stopAt = stA;
         // never wait on a runway: hold at the last hold-short line before the stopping point instead
-        for (const st of ac.path.stops) if (st.kind === 'rwy' && st.s > ac.path.s && st.s - ac.path.s < stopAt + 500) stopAt = Math.min(stopAt, st.s - ac.path.s);
+        for (const st of ac.path.stops) if (st.kind === 'rwy' && st.s > ac.path.s - 25 && st.s - ac.path.s < stopAt + 500) stopAt = Math.min(stopAt, Math.max(0, st.s - ac.path.s));
         if (best === null || stopAt < best) { best = stopAt; ac.hoWith = o.cs; }
       }
       return best;
@@ -1592,6 +1616,13 @@ const ATC = {};
       ac.x = q.x; ac.y = q.y;
       ac.hdg = ac.phase === 'push' ? A.norm(q.hdg + 180) : q.hdg;
       ac.ias = ac.spd / KT;
+      if (ac.lahso && (roll || ac.phase === 'exiting')) {
+        if (!ac.lahso.bust && this.onRunway(ac) && this.frR(ac, ac.rwy).u > ac.lahso.hsU + 40) {
+          ac.lahso.bust = true; this.score.incur++;
+          this.incident('LAHSO', `${ac.cs} failed to hold short of runway ${ac.lahso.name}`, 60, ac);
+        }
+        if (ac.phase === 'exiting' && !this.onAnyRunway(ac)) ac.lahso = null;
+      }
       if (roll && p.s > p.hsS) ac.phase = 'exiting';
       else if (roll && ac.spd > 15 * KT && (ac.replanT = (ac.replanT || 0) + dt) > 2) {
         ac.replanT = 0;
@@ -1771,13 +1802,40 @@ const ATC = {};
       if (o.wentAround) return false; // go-arounds don't count toward SRS
       return dep && fo.u > u0 && fo.u < this.L && Math.abs(fo.v) < 1200 && Math.abs(A.angDiff(o.hdg, this.H)) < 35 && o.alt - this.elev < 2000;
     }
+    // initial departure heading: turn from runway heading toward the departure direction, at most 90 degrees
+    initialHdg(ac, R) {
+      if (ac.depBrg == null) return ac.depOff != null ? A.norm(Math.round((R.H + ac.depOff) / 10) * 10) || 360 : null;
+      let d = A.angDiff(R.H, ac.depBrg);
+      if (Math.abs(d) < 15) return null;              // straight out: runway heading
+      d = A.clamp(d, -90, 90);
+      return A.norm(Math.round((R.H + d) / 10) * 10) || 360;
+    }
+    // land and hold short: available only to a crossing runway in use, in at least 1000 ft / 3 SM, when the
+    // aircraft can stop (and turn off) before the hold-short point
+    lahsoInfo(ac) {
+      const R = ac.rwy; if (!R || !R.crossU) return null;
+      if (this.wx.ceilFt < 1000 || this.wx.visFt < 3 * 5280) return null;
+      let best = null;
+      for (const rid of Object.keys(R.crossU)) {
+        const other = this.ends.find(e => e.rwyId === rid); if (!other) continue;
+        const hsU = R.crossU[rid] - 330; if (hsU < 1500) continue;
+        const v = ac.vapp * KT, vx = 20 * KT;
+        const need = (ac.tdz || ac.T.tdz) * 1.2 + (v * v - vx * vx) / (2 * ac.T.decel) + 250;
+        if (need > hsU) continue;
+        if (!R.exits.some(e => e.u <= hsU - 100 && e.u >= need * 0.7)) continue;
+        if (!best || hsU < best.hsU) best = { rid, hsU, name: other.id };
+      }
+      return best;
+    }
     srsViol(text) { this.score.srs++; this.incident('SRS', text, 50); }
     // intersecting runways (7110.65 3-9-8 / 3-10-4): traffic on the crossing runway must be past the intersection
     crossChecks(ac, kind) {
       const me = this.cur;
       for (const rid of Object.keys(me.crossU)) {
+        if (ac.lahso && ac.lahso.rid === rid && !ac.lahso.bust) continue;       // we hold short of that runway
         for (const o of this.acs) {
           if (o === ac || o.removed || !o.rwy || o.rwy.rwyId !== rid || o.wentAround) continue;
+          if (o.lahso && o.lahso.rid === me.rwyId && !o.lahso.bust) continue;     // they hold short of ours
           const fo = this.frR(o, o.rwy), uX = o.rwy.crossU[me.rwyId];
           if (uX == null || fo.u >= uX + 100 || Math.abs(fo.v) > 1500) continue;
           let why = null;
@@ -1912,7 +1970,7 @@ const ATC = {};
       const f = this.fr(ac), agl = ac.alt - this.elev;
       // before the handoff: tower's altitude; after it: departure climbs them toward cruise on present heading
       const cruise = ac.flight === 'IFR' ? (ac.T.ga ? 9000 : 17000) : this.elev + 4500;
-      const altT = ac.ho ? cruise : ac.flight === 'IFR' ? 5000 : this.elev + 2800;
+      const altT = ac.ho ? Math.max(cruise, this.elev + 6000) : ac.flight === 'IFR' ? Math.max(5000, this.elev + 4000) : this.elev + 2800;
       const spdT = agl < 1000 ? ac.vr + 20 : (ac.ho && ac.alt > 10000 ? Math.max(ac.T.climbSpd, ac.T.ga ? ac.T.climbSpd : 290) : ac.T.climbSpd);
       let track;
       if (ac.ho && ac.hoHdg != null) track = ac.hoHdg;
@@ -1932,7 +1990,7 @@ const ATC = {};
     }
     missed(ac, dt) {
       const f = this.fr(ac);
-      this.airMove(ac, dt, this.lineTrack(ac, this.thr, this.H, 30), 3000 + 0 * this.elev, ac.T.app);
+      this.airMove(ac, dt, this.lineTrack(ac, this.thr, this.H, 30), Math.max(3000, this.elev + 2300), ac.T.app);
       if (f.u > this.L + 2.5 * NM) {
         this.pilot(ac, `${ac.say}, switching to approach.`);
         this.remove(ac);
@@ -2094,7 +2152,7 @@ const ATC = {};
     }
     goAround(ac, reason, kind) {
       if (ac.onGround) return;
-      ac.wentAround = true;
+      ac.wentAround = true; ac.lahso = null;
       const byCtrl = kind === true || kind === 'ctrl';
       ac.clr.land = null; ac.askedLand = false; ac.occCheck = false; ac.fas = false; ac.spdA = null; ac.prevU = undefined;
       if (kind === 'la') { this.award(2); }
@@ -2138,6 +2196,14 @@ const ATC = {};
         const vx = (15 + (e.rapid ? (ac.T.ga ? (ex ? 35 : 30) : (ex ? 50 : 45)) : (ac.T.ga ? (ex ? 18 : 15) : (ex ? 20 : 15)))) * KT;
         return { a: (v * v - vx * vx) / (2 * Math.max(d, 60)), vx };
       };
+      if (ac.lahso) {
+        const before = this.exits.filter(e => e.u > u + 350 && e.u <= ac.lahso.hsU - 100);
+        if (before.length) {
+          const ok = before.filter(e => !busy(e) && need(e).a <= max);
+          const e = ok.length ? (ok.find(e => need(e).a <= comfort) || ok[ok.length - 1]) : before[before.length - 1];
+          const n = need(e); return { e, a: Math.max(n.a, 2.6), vx: n.vx };
+        }
+      }
       const wantSouth = !!ac.spot && !ex; // "south" = the FBO side of this runway
       if (ac.exitReq) {
         const opts = cands.filter(c => c.name === ac.exitReq);
@@ -2256,7 +2322,7 @@ const ATC = {};
         if (!this.ap.tw[conn].nodes.some(n => this.N[n].rwyId === R.rwyId)) return { err: `${conn} does not serve runway ${m[1]}` };
         return { type: 'rwy', end: m[1], conn };
       }
-      if (/^G\d$/.test(tok) || /^P\d$/.test(tok)) {
+      if (/^G\d{1,2}$/.test(tok) || /^P\d{1,2}$/.test(tok)) {
         if (!this.N[tok]) return { err: `unknown parking ${tok}` };
         return { type: 'park', node: tok };
       }
@@ -2292,7 +2358,18 @@ const ATC = {};
         if (/^S\d{2,3}$/.test(k)) { toks.splice(i, 0, k.slice(1)); k = 'SPD'; }
         if (/^H\d{3}$/.test(k) && !ac.onGround && ac.phase === 'climb') { ac.depHdg = +k.slice(1) % 360 || 360; push(`fly heading ${k.slice(1)}`); continue; }
         switch (k) {
+          case 'LAHSO': {
+            if (!air || !['final', 'pattern', 'inbound'].includes(ac.phase)) { err = 'unable, not on approach'; break; }
+            const L = this.lahsoInfo(ac);
+            if (!L) { err = 'unable to hold short'; break; }
+            if (this.rng.chance(ac.airline ? 0.05 : 0.12)) { err = `unable to hold short of runway ${L.name}`; break; }
+            ac.clr.land = 'full'; ac.lahso = L; ac.req = null;
+            if (ac.pat) ac.pat.wantFull = true;
+            push(`wind ${this.windStr()}, runway ${rwy} cleared to land, hold short of runway ${L.name}`, `cleared to land runway ${rwy}, holding short of runway ${L.name}`);
+            break;
+          }
           case 'CTL': case 'FS': case 'TG': case 'OPT': case 'LA': {
+            ac.lahso = null;
             if (!air || !['final', 'pattern', 'inbound'].includes(ac.phase) || (ac.phase === 'pattern' && ac.pat.leg === 'upwind' && this.fr(ac).u > 0 && ac.alt - this.elev < 400)) { err = 'unable, not on approach'; break; }
             const kind = { CTL: 'full', FS: 'full', TG: 'tg', OPT: 'opt', LA: 'la' }[k];
             if ((kind === 'tg' || kind === 'opt') && !ac.pat) { err = 'unable touch and go (IFR full stop)'; break; }
@@ -2399,7 +2476,7 @@ const ATC = {};
             ac.route = { nodes: r.nodes, dest, via: r.via };
             if (dest.type === 'rwy') {
               ac.rwy = this.endsById[dest.end]; this.use(ac); rwy = ac.rwy.id;
-              if (ac.flight === 'IFR' && ac.depOff != null) ac.depHdg = A.norm(Math.round((ac.rwy.H + ac.depOff) / 10) * 10) || 360;
+              if (ac.flight === 'IFR') ac.depHdg = this.initialHdg(ac, ac.rwy);
               if (ac.pat) ac.pat.sg = ac.rwy.sideSg;
             }
             ac.path = this.makeTaxiPath(ac, r.nodes, dest, st.pos);
@@ -2581,7 +2658,7 @@ const ATC = {};
       return ac.phase;
     }
     clrTag(ac) {
-      if (ac.clr.land) return { full: 'CTL', tg: 'T&G', opt: 'OPT', la: 'LA' }[ac.clr.land];
+      if (ac.clr.land) return ac.lahso ? 'CTL·HS' : { full: 'CTL', tg: 'T&G', opt: 'OPT', la: 'LA' }[ac.clr.land];
       if (ac.clr.to && ['taxi', 'hs', 'lineup', 'luaw', 'takeoff'].includes(ac.phase)) return 'CTO';
       if (ac.clr.luaw && ['taxi', 'hs', 'lineup', 'luaw'].includes(ac.phase)) return 'LUAW';
       return '';
@@ -2606,11 +2683,32 @@ const ATC = {};
     // approach/departure paths of every runway stay clear of buildings and trees
     const inCorridor = (x, y) => rws.some(r => { const dx = x - r.cx, dy = y - r.cy, u = Math.abs(dx * r.ux + dy * r.uy), v = Math.abs(dx * -r.uy + dy * r.ux); return u < 9 * A.NM && v < 1500 + Math.max(0, u - r.half - 500) * 0.08; });
     const blocked = (x, y, pad) => inAirport(x, y, pad) || inCorridor(x, y);
+    const theme = (ap && ap.theme) || 'plains';
+    S.theme = theme;
+
+    // ---- terrain themes
+    // smooth value noise (deterministic, independent of the scenery RNG so the plains layout is unchanged)
+    const hash = (i, j) => { let h = (i * 374761393 + j * 668265263) ^ (seed || 7331); h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967295; };
+    const vnoise = (x, y) => { const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+      const a = hash(i, j), b = hash(i + 1, j), c = hash(i, j + 1), d = hash(i + 1, j + 1); return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy; };
+    const fbm = (x, y) => { let v = 0, amp = 0.5, f = 1; for (let o = 0; o < 4; o++) { v += amp * vnoise(x * f, y * f); f *= 2.03; amp *= 0.5; } return v / 0.9375; };
+    // mountains: an east-west valley (the runways sit on its floor) between two ranges
+    const yc = x => 2000 + 2500 * Math.sin(x / 38000), vw = x => 12000 + 3500 * Math.sin(x / 21000 + 1.3);
+    const height = (x, y) => {
+      const t = (Math.abs(y - yc(x)) - vw(x)) / 15000;
+      if (t <= 0) return 0;
+      const m = t < 1 ? t * t * (3 - 2 * t) : 1 + (t - 1) * 0.35;
+      const ridge = 1 - Math.abs(fbm(x / 9000, y / 9000) * 2 - 1);
+      return m * (4200 * (0.4 + fbm(x / 14000 + 7, y / 14000)) + 2400 * ridge);
+    };
+    // coast: open water east of a gently curving shoreline
+    const coastX = y => 11000 + 2600 * Math.sin(y / 16000 + 0.7) + 900 * Math.sin(y / 4700);
+    const land = theme === 'coast' ? (x, y) => x < coastX(y) - 150 : theme === 'mountains' ? (x, y) => height(x, y) < 120 : () => true;
 
     // ---- city & town definitions
-    const city = { x: -26000, y: 24000, r: 15000 };
-    const town = { x: 30000, y: -26000, r: 6000 };
-    const town2 = { x: 38000, y: 30000, r: 4500 };
+    const city = theme === 'mountains' ? { x: -34000, y: 9500, r: 6500 } : { x: -26000, y: 24000, r: 15000 };
+    const town = theme === 'coast' ? { x: coastX(-24000) - 3800, y: -24000, r: 5200 } : theme === 'mountains' ? { x: 30000, y: -4300, r: 4500 } : { x: 30000, y: -26000, r: 6000 };
+    const town2 = theme === 'coast' ? { x: -34000, y: -28000, r: 4500 } : theme === 'mountains' ? { x: 56000, y: 9000, r: 3500 } : { x: 38000, y: 30000, r: 4500 };
     // irregular town outlines: radius varies with bearing
     for (const c of [city, town, town2]) { c.h = [R.range(0, 6), R.range(0, 6), R.range(0, 6)]; }
     const edge = (c, ang) => 0.78 + 0.16 * Math.sin(ang * 2 + c.h[0]) + 0.1 * Math.sin(ang * 3 + c.h[1]) + 0.06 * Math.sin(ang * 7 + c.h[2]);
@@ -2619,13 +2717,15 @@ const ATC = {};
 
     // ---- river: meanders north→south east of the city, west of the field
     const river = [];
-    for (let y = EXT; y >= -EXT; y -= 1500) river.push({ x: -12000 + Math.sin(y / 9000) * 5000 + Math.sin(y / 3100) * 1400, y });
-    S.water.push({ kind: 'river', pts: river, w: 380 });
-    const riverX = y => { for (let i = 1; i < river.length; i++) if (river[i].y <= y) { const a = river[i - 1], b = river[i]; const t = (y - a.y) / (b.y - a.y); return a.x + (b.x - a.x) * t; } return river[river.length - 1].x; };
-    const nearRiver = (x, y, d) => Math.abs(x - riverX(y)) < d;
+    if (theme === 'mountains') for (let x = -EXT * 1.2; x <= EXT * 1.2; x += 1500) river.push({ x, y: yc(x) - 0.48 * vw(x) + Math.sin(x / 3100) * 700 });
+    else for (let y = EXT; y >= -EXT; y -= 1500) river.push({ x: -12000 + Math.sin(y / 9000) * 5000 + Math.sin(y / 3100) * 1400, y });
+    S.water.push({ kind: 'river', pts: river, w: theme === 'mountains' ? 300 : 380 });
+    const segD = (x, y, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy; const t = A.clamp(((x - a.x) * dx + (y - a.y) * dy) / l2, 0, 1); return Math.hypot(x - a.x - dx * t, y - a.y - dy * t); };
+    const nearRiver = (x, y, d) => { for (let i = 1; i < river.length; i++) { const a = river[i - 1], b = river[i]; if (Math.min(a.x, b.x) - d > x || Math.max(a.x, b.x) + d < x || Math.min(a.y, b.y) - d > y || Math.max(a.y, b.y) + d < y) continue; if (segD(x, y, a, b) < d) return true; } return false; };
     // lakes / ponds
-    for (const L of [{ x: 22000, y: 15000, rx: 3200, ry: 1900 }, { x: -40000, y: -18000, rx: 4000, ry: 2600 }, { x: 14000, y: -36000, rx: 1800, ry: 1200 }]) S.water.push({ kind: 'lake', ...L });
-    for (let i = 0; i < 18; i++) { const x = R.range(-EXT, EXT), y = R.range(-EXT, EXT); if (!blocked(x, y, 2000) && !inCity(x, y, city, 1.2)) S.water.push({ kind: 'lake', x, y, rx: R.range(150, 420), ry: R.range(120, 300) }); }
+    for (const L of [{ x: 22000, y: 15000, rx: 3200, ry: 1900 }, { x: -40000, y: -18000, rx: 4000, ry: 2600 }, { x: 14000, y: -36000, rx: 1800, ry: 1200 }]) if (land(L.x - L.rx, L.y) && land(L.x + L.rx, L.y)) S.water.push({ kind: 'lake', ...L });
+    if (theme === 'mountains') S.water.push({ kind: 'lake', x: -56000, y: yc(-56000) - 1500, rx: 5200, ry: 1700 }); // reservoir up the valley
+    for (let i = 0; i < 18; i++) { const x = R.range(-EXT, EXT), y = R.range(-EXT, EXT); if (!blocked(x, y, 2000) && !inCity(x, y, city, 1.2)) { const rx = R.range(150, 420), ry = R.range(120, 300); if (land(x, y)) S.water.push({ kind: 'lake', x, y, rx, ry }); } }
     const inWater = (x, y) => nearRiver(x, y, 450) || S.water.some(w => w.kind === 'lake' && ((x - w.x) / w.rx) ** 2 + ((y - w.y) / w.ry) ** 2 < 1.3);
 
     // ---- fields on a one-mile section grid
@@ -2641,7 +2741,9 @@ const ATC = {};
         if (inAirport(x + w / 2, y + h / 2, -800) && inAirport(x, y) && inAirport(x + w, y + h)) continue;
         const c = R.pick(crop);
         const rows = R.chance(0.55) ? (R.chance(0.5) ? 'h' : 'v') : null;
-        S.fields.push({ x: x + 25, y: y + 25, w: w - 50, h: h - 50, c, rows, round: R.chance(0.07) });
+        const round = R.chance(0.07);
+        if (!land(x + w / 2, y + h / 2) || !land(x, y) || !land(x + w, y + h)) continue;
+        S.fields.push({ x: x + 25, y: y + 25, w: w - 50, h: h - 50, c, rows, round });
       }
     }
     // ---- section roads (gravel / county), skip the airport and water
@@ -2649,7 +2751,7 @@ const ATC = {};
     for (let x = -EXT; x <= EXT; x += MI) {
       let seg = [];
       for (let y = -EXT; y <= EXT; y += 500) {
-        const bad = inAirport(x, y, 400) || inCity(x, y, city, 0.95) || nearRiver(x, y, 250) && R.chance(0.0);
+        const bad = inAirport(x, y, 400) || inCity(x, y, city, 0.95) || !land(x, y);
         if (bad) { if (seg.length > 1) addRoad(seg, 34, '#8c8673', 'county'); seg = []; } else seg.push({ x, y });
       }
       if (seg.length > 1) addRoad(seg, 34, '#8c8673', 'county');
@@ -2657,22 +2759,49 @@ const ATC = {};
     for (let y = -EXT; y <= EXT; y += MI) {
       let seg = [];
       for (let x = -EXT; x <= EXT; x += 500) {
-        const bad = inAirport(x, y, 400) || inCity(x, y, city, 0.95);
+        const bad = inAirport(x, y, 400) || inCity(x, y, city, 0.95) || !land(x, y);
         if (bad) { if (seg.length > 1) addRoad(seg, 34, '#8c8673', 'county'); seg = []; } else seg.push({ x, y });
       }
       if (seg.length > 1) addRoad(seg, 34, '#8c8673', 'county');
     }
     // interstate SW→NE passing north of the field, plus an airport access road
-    const hw = []; for (let t = -1; t <= 1.0001; t += 0.02) hw.push({ x: t * EXT, y: 9000 + t * EXT * 0.55 + Math.sin(t * 3) * 2500 });
+    const hw = [];
+    if (theme === 'mountains') for (let x = -EXT; x <= EXT + 1; x += 1600) hw.push({ x, y: yc(x) + 0.55 * vw(x) });
+    else if (theme === 'coast') for (let y = -EXT; y <= EXT + 1; y += 1600) hw.push({ x: coastX(y) - 19000 + Math.sin(y / 9000) * 1200, y });
+    else for (let t = -1; t <= 1.0001; t += 0.02) hw.push({ x: t * EXT, y: 9000 + t * EXT * 0.55 + Math.sin(t * 3) * 2500 });
     addRoad(hw, 150, '#5a5d62', 'interstate');
+    // roads drawn point to point but broken wherever they would run into water or up a mountainside
+    const addClipped = (pts, w, c, kind) => {
+      let seg = [];
+      for (let i = 1; i < pts.length; i++) {
+        const a = pts[i - 1], b = pts[i], n = Math.max(1, Math.ceil(A.dist(a, b) / 400));
+        for (let k = i === 1 ? 0 : 1; k <= n; k++) { const x = a.x + (b.x - a.x) * k / n, y = a.y + (b.y - a.y) * k / n;
+          if (!land(x, y) || inAirport(x, y, 200)) { if (seg.length > 1) addRoad(seg, w, c, kind); seg = []; } else seg.push({ x, y }); }
+      }
+      if (seg.length > 1) addRoad(seg, w, c, kind);
+    };
     const term = ap ? ap.terminal : { x: -400, y: 2080 };
-    const hwY = x => 9000 + (x / EXT) * EXT * 0.55 + Math.sin(x / EXT * 3) * 2500;
     const tx = term.x - 400;
     const rwyNorthOfTerm = ap && ap.runways.some(r => Math.min(r.a.y, r.b.y) > term.y);
-    addRoad([...(rwyNorthOfTerm ? [] : [{ x: term.x, y: term.y + 350 }]), { x: tx, y: B.y1 + 300 }, { x: tx - 1200, y: (B.y1 + hwY(tx)) / 2 }, { x: tx - 2000, y: hwY(tx - 2000) }], 60, '#6a6d72', 'state');
-    // state highway to the towns
-    addRoad([{ x: 10000, y: -EXT }, { x: 12000, y: -30000 }, { x: 22000, y: -26000 }, { x: town.x, y: town.y }, { x: 42000, y: -18000 }, { x: EXT, y: -15000 }], 70, '#64676b', 'state');
-    addRoad([{ x: EXT, y: 34000 }, { x: town2.x, y: town2.y }, { x: 26000, y: 24000 }, { x: 14000, y: 14000 }], 60, '#64676b', 'state');
+    const gateP = { x: tx, y: B.y1 + 300 };
+    let hwNear = hw[0]; for (const q of hw) if (A.dist(q, gateP) < A.dist(hwNear, gateP)) hwNear = q;
+    addRoad([...(rwyNorthOfTerm ? [] : [{ x: term.x, y: term.y + 350 }]), gateP, { x: (gateP.x + hwNear.x) / 2 - 600, y: (gateP.y + hwNear.y) / 2 }, hwNear], 60, '#6a6d72', 'state');
+    // state highways to the towns
+    if (theme === 'plains') {
+      addRoad([{ x: 10000, y: -EXT }, { x: 12000, y: -30000 }, { x: 22000, y: -26000 }, { x: town.x, y: town.y }, { x: 42000, y: -18000 }, { x: EXT, y: -15000 }], 70, '#64676b', 'state');
+      addRoad([{ x: EXT, y: 34000 }, { x: town2.x, y: town2.y }, { x: 26000, y: 24000 }, { x: 14000, y: 14000 }], 60, '#64676b', 'state');
+    } else if (theme === 'mountains') {
+      const sr = []; for (let x = -EXT; x <= EXT + 1; x += 1600) sr.push({ x, y: yc(x) - 0.68 * vw(x) });
+      addClipped(sr, 70, '#64676b', 'state');
+      addClipped([{ x: city.x, y: city.y }, { x: city.x + 2000, y: yc(city.x + 2000) + 0.55 * vw(city.x + 2000) }], 60, '#64676b', 'state');
+      addClipped([{ x: town2.x, y: town2.y }, { x: town2.x - 3000, y: yc(town2.x - 3000) + 0.55 * vw(town2.x - 3000) }], 60, '#64676b', 'state');
+    } else {
+      addClipped([{ x: -EXT, y: -14000 }, { x: town2.x, y: town2.y }, { x: -16000, y: -22000 }, { x: town.x, y: town.y }], 70, '#64676b', 'state');
+      addClipped([{ x: town.x, y: town.y }, { x: coastX(-24000) - 7000, y: -18000 }], 60, '#64676b', 'state');
+      // shore road just behind the beach
+      const sh = []; for (let y = -EXT; y <= EXT + 1; y += 1200) sh.push({ x: coastX(y) - 900, y });
+      addClipped(sh, 44, '#6f7175', 'county');
+    }
 
     // ---- city: street grid, downtown towers, neighborhoods
     const roofs = ['#8d8f93', '#7b7f86', '#9a8e80', '#6f747b', '#a39b90', '#86827c', '#5f6670'];
@@ -2681,7 +2810,7 @@ const ATC = {};
       const g = grid;
       for (let x = c.x - c.r; x <= c.x + c.r; x += g) for (let y = c.y - c.r; y <= c.y + c.r; y += g) {
         const d = cityD(x + g / 2, y + g / 2, c);
-        if (d > 1 || inWater(x, y) || blocked(x, y, 600)) continue;
+        if (d > 1 || inWater(x, y) || blocked(x, y, 600) || !land(x, y) || !land(x + g, y + g)) continue;
         const outer = d > 0.75 && R.chance((d - 0.75) * 2.2); // ragged suburban fringe
         if (outer) continue;
         // streets bounding the block
@@ -2721,7 +2850,7 @@ const ATC = {};
         }
       }
       // a park in the middle-ish
-      S.fields.push({ x: c.x + c.r * 0.35, y: c.y - c.r * 0.25, w: g * 1.6, h: g * 1.2, c: '#4f7a3c', park: true });
+      if (land(c.x + c.r * 0.35, c.y - c.r * 0.25)) S.fields.push({ x: c.x + c.r * 0.35, y: c.y - c.r * 0.25, w: g * 1.6, h: g * 1.2, c: '#4f7a3c', park: true });
     };
     buildTown(city, 620, 1);
     buildTown(town, 520, 0.6);
@@ -2731,7 +2860,7 @@ const ATC = {};
     for (let sx = -EXT; sx < EXT; sx += MI) for (let sy = -EXT; sy < EXT; sy += MI) {
       if (!R.chance(0.42)) continue;
       const x = sx + R.pick([90, MI - 420]), y = sy + R.pick([90, MI - 420]);
-      if (blocked(x, y, 1500) || inCity(x, y, city, 1.15) || inCity(x, y, town, 1.3) || inCity(x, y, town2, 1.3) || inWater(x, y)) continue;
+      if (blocked(x, y, 1500) || inCity(x, y, city, 1.15) || inCity(x, y, town, 1.3) || inCity(x, y, town2, 1.3) || inWater(x, y) || !land(x, y) || !land(x + 360, y + 330)) continue;
       S.fields.push({ x: x - 30, y: y - 30, w: 360, h: 330, c: '#4a5f3a', yard: true });
       S.bldg.push({ x: x + 20, y: y + 30, w: 60, h: 45, c: R.pick(houseRoofs), tall: 8, house: true });
       S.bldg.push({ x: x + 140, y: y + 20, w: R.range(80, 120), h: R.range(50, 70), c: R.pick(['#8a3a2e', '#7d2f27', '#6f6f6f', '#94402f']), tall: 14 });
@@ -2745,15 +2874,65 @@ const ATC = {};
       const a = river[i - 1], b = river[i];
       for (let t = 0; t < 1; t += 0.08) for (const sg of [-1, 1]) {
         const x = a.x + (b.x - a.x) * t + sg * R.range(260, 650), y = a.y + (b.y - a.y) * t + R.range(-60, 60);
-        if (blocked(x, y, 300) || inCity(x, y, city, 0.9) || !R.chance(0.85)) continue;
+        if (blocked(x, y, 300) || inCity(x, y, city, 0.9) || !R.chance(0.85) || !land(x, y)) continue;
         S.trees.push({ x, y, r: R.range(30, 60), c: R.pick(['#27401f', '#2d4a25', '#345529']) });
       }
     }
     for (let i = 0; i < 70; i++) {
       const cx = R.range(-EXT, EXT), cy = R.range(-EXT, EXT);
-      if (blocked(cx, cy, 2200) || inCity(cx, cy, city, 1.1) || inWater(cx, cy)) continue;
+      if (blocked(cx, cy, 2200) || inCity(cx, cy, city, 1.1) || inWater(cx, cy) || !land(cx, cy)) continue;
       const n = R.int(10, 45), spread = R.range(250, 700);
-      for (let k = 0; k < n; k++) { const x = cx + R.range(-spread, spread), y = cy + R.range(-spread * 0.6, spread * 0.6); if (!blocked(x, y, 500)) S.trees.push({ x, y, r: R.range(25, 55), c: R.pick(['#27401f', '#2d4a25', '#345529', '#3b5c2e']) }); }
+      for (let k = 0; k < n; k++) { const x = cx + R.range(-spread, spread), y = cy + R.range(-spread * 0.6, spread * 0.6); if (!blocked(x, y, 500)) { const r = R.range(25, 55), c = R.pick(['#27401f', '#2d4a25', '#345529', '#3b5c2e']); if (land(x, y)) S.trees.push({ x, y, r, c }); } }
+    }
+
+    if (theme === 'mountains') {
+      // shaded relief, one cell every 1,200 ft; the valley floor is left to the fields
+      const cell = 800, lim = EXT * 1.3, nx = Math.ceil(2 * lim / cell);
+      const T = { x0: -lim, y0: -lim, cell, nx, ny: nx, px: new Uint8ClampedArray(nx * nx * 4) };
+      const stops = [[0, [88, 106, 62]], [400, [72, 94, 54]], [1400, [46, 70, 41]], [3600, [50, 66, 46]], [5200, [98, 94, 82]], [6800, [128, 123, 112]], [7800, [196, 201, 206]], [8800, [236, 239, 242]]];
+      const ramp = h => { for (let i = 1; i < stops.length; i++) if (h <= stops[i][0]) { const [h0, a] = stops[i - 1], [h1, b] = stops[i], t = (h - h0) / (h1 - h0); return a.map((v, k) => v + (b[k] - v) * t); } return stops[stops.length - 1][1]; };
+      const L = [-0.55, 0.55, 0.63];
+      for (let j = 0; j < nx; j++) for (let i = 0; i < nx; i++) {
+        const x = T.x0 + (i + 0.5) * cell, y = T.y0 + (j + 0.5) * cell, h = height(x, y);
+        const o = (j * nx + i) * 4;
+        if (h < 60) { T.px[o + 3] = 0; continue; }
+        const gx = (height(x + 400, y) - height(x - 400, y)) / 800, gy = (height(x, y + 400) - height(x, y - 400)) / 800;
+        const n = Math.hypot(gx, gy, 1), dot = (-gx * L[0] - gy * L[1] + L[2]) / n;
+        const k = A.clamp(0.5 + 0.7 * dot, 0.4, 1.25), col = ramp(h);
+        T.px[o] = col[0] * k; T.px[o + 1] = col[1] * k; T.px[o + 2] = col[2] * k; T.px[o + 3] = Math.min(255, h * 2.5);
+      }
+      S.terrain = T;
+      // conifer forest on the lower slopes
+      for (let i = 0; i < 9000; i++) {
+        const x = R.range(-EXT * 0.75, EXT * 0.75), y = R.range(-EXT * 0.75, EXT * 0.75), h = height(x, y);
+        if (h < 200 || h > 3800 || blocked(x, y, 400)) continue;
+        S.trees.push({ x, y, r: R.range(22, 40), c: R.pick(['#1f3420', '#24402a', '#2a4626']) });
+      }
+      // foothill pines along the valley edges
+      for (let i = 0; i < 2500; i++) {
+        const x = R.range(-EXT, EXT), sg = R.chance(0.5) ? 1 : -1, y = yc(x) + sg * (vw(x) - R.range(0, 2500));
+        if (blocked(x, y, 400) || inWater(x, y) || inCity(x, y, city, 1.1)) continue;
+        S.trees.push({ x, y, r: R.range(20, 34), c: R.pick(['#22392a', '#294530']) });
+      }
+    }
+    if (theme === 'coast') {
+      const pts = []; for (let y = -EXT * 1.7; y <= EXT * 1.7; y += 600) pts.push({ x: coastX(y), y });
+      S.coast = { pts, far: EXT * 2.2 };
+      // marina by the coastal town: breakwater, piers and moored boats
+      const mx = coastX(town.y), my = town.y;
+      S.piers = []; S.boats = [];
+      S.piers.push({ pts: [{ x: mx - 200, y: my + 1800 }, { x: mx + 1500, y: my + 1500 }, { x: mx + 1700, y: my + 300 }], w: 60, c: '#8e8a80' });
+      S.piers.push({ pts: [{ x: mx - 200, y: my - 1600 }, { x: mx + 1300, y: my - 1300 }], w: 60, c: '#8e8a80' });
+      for (let k = 0; k < 5; k++) {
+        const py = my - 900 + k * 500; S.piers.push({ pts: [{ x: mx - 100, y: py }, { x: mx + 800, y: py }], w: 22, c: '#a2927a' });
+        for (let b = 0; b < 7; b++) if (R.chance(0.75)) S.boats.push({ x: mx + 60 + b * 105, y: py + (R.chance(0.5) ? 45 : -45), l: R.range(40, 75), c: R.pick(['#f2f2ef', '#e8edf2', '#dfe6ea', '#c9d6df']) });
+      }
+      // a few boats offshore and a lighthouse on the point
+      for (let k = 0; k < 14; k++) { const y = R.range(-EXT, EXT), x = coastX(y) + R.range(2500, 26000); S.boats.push({ x, y, l: R.range(50, 160), c: '#eef2f4', wake: true }); }
+      const ly = 26000; S.lighthouse = { x: coastX(ly) - 120, y: ly };
+      S.lights.push({ x: S.lighthouse.x, y: S.lighthouse.y, c: 'w' });
+      // dune grass and scrub just behind the beach
+      for (let i = 0; i < 1400; i++) { const y = R.range(-EXT, EXT), x = coastX(y) - R.range(250, 1400); if (blocked(x, y, 300)) continue; S.trees.push({ x, y, r: R.range(14, 26), c: R.pick(['#4d5e36', '#56673b', '#3e5230']) }); }
     }
     // highway streetlights near interchanges
     for (let i = 0; i < hw.length; i += 3) if (Math.abs(hw[i].x) < 12000) S.lights.push({ x: hw[i].x, y: hw[i].y, c: 's' });
@@ -2768,6 +2947,15 @@ const ATC = {};
   // draw into a context already in world transform; vb = visible world bounds
   A.drawScenery = function (ctx, S, vb, sc) {
     const vis = (x, y, x2, y2) => x2 >= vb.x0 && x <= vb.x1 && y2 >= vb.y0 && y <= vb.y1;
+    // mountains: shaded relief
+    if (S.terrain) {
+      const T = S.terrain;
+      if (!T.img && typeof document !== 'undefined') {
+        T.img = document.createElement('canvas'); T.img.width = T.nx; T.img.height = T.ny;
+        T.img.getContext('2d').putImageData(new ImageData(T.px, T.nx, T.ny), 0, 0);
+      }
+      if (T.img) { ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high'; ctx.drawImage(T.img, T.x0, T.y0, T.nx * T.cell, T.ny * T.cell); }
+    }
     // fields
     for (const f of S.fields) {
       if (!vis(f.x, f.y, f.x + f.w, f.y + f.h)) continue;
@@ -2786,6 +2974,17 @@ const ATC = {};
       ctx.fillStyle = '#2f5370'; ctx.strokeStyle = '#2f5370';
       if (w.kind === 'river') { ctx.lineWidth = w.w; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath(); w.pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.stroke(); }
       else if (vis(w.x - w.rx, w.y - w.ry, w.x + w.rx, w.y + w.ry)) { ctx.beginPath(); ctx.ellipse(w.x, w.y, w.rx, w.ry, 0, 0, 7); ctx.fill(); }
+    }
+    // coast: dunes, shallows, deep water, beach
+    if (S.coast) {
+      const P = S.coast.pts, far = S.coast.far;
+      const line = (dx) => { ctx.beginPath(); P.forEach((p, i) => i ? ctx.lineTo(p.x + dx, p.y) : ctx.moveTo(p.x + dx, p.y)); };
+      ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+      line(0); ctx.strokeStyle = '#7f8c55'; ctx.lineWidth = 1200; ctx.stroke();
+      const sea = (dx, col) => { line(dx); ctx.lineTo(far, P[P.length - 1].y); ctx.lineTo(far, P[0].y); ctx.closePath(); ctx.fillStyle = col; ctx.fill(); };
+      sea(0, '#3d7f99'); sea(1600, '#2f6886'); sea(5000, '#24526f'); sea(12000, '#1e4762');
+      line(0); ctx.strokeStyle = '#d9c99b'; ctx.lineWidth = Math.max(280, 2 / sc); ctx.stroke();
+      if (sc > 0.03) { line(220); ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 40; ctx.stroke(); }
     }
     // city blocks as simplified blobs when far out
     const detail = sc > 0.018;
@@ -2815,6 +3014,17 @@ const ATC = {};
       if (!t.silo) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.arc(t.x + t.r * 0.5, t.y - t.r * 0.4, t.r, 0, 7); ctx.fill(); }
       ctx.fillStyle = t.c; ctx.beginPath(); ctx.arc(t.x, t.y, t.r, 0, 7); ctx.fill();
     }
+    // marina, boats, lighthouse
+    if (S.piers) {
+      ctx.lineCap = 'butt';
+      for (const p of S.piers) { ctx.strokeStyle = p.c; ctx.lineWidth = p.w; ctx.beginPath(); p.pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke(); }
+      for (const b of S.boats) {
+        if (!vis(b.x - b.l, b.y - b.l, b.x + b.l, b.y + b.l)) continue;
+        if (b.wake) { ctx.fillStyle = 'rgba(255,255,255,0.25)'; ctx.beginPath(); ctx.moveTo(b.x - b.l / 2, b.y); ctx.lineTo(b.x - b.l * 3, b.y + b.l * 0.6); ctx.lineTo(b.x - b.l * 3, b.y - b.l * 0.6); ctx.closePath(); ctx.fill(); }
+        ctx.fillStyle = b.c; ctx.beginPath(); ctx.ellipse(b.x, b.y, b.l / 2, b.l / 6, 0, 0, 7); ctx.fill();
+      }
+    }
+    if (S.lighthouse) { const L = S.lighthouse; ctx.fillStyle = '#f4f1ea'; ctx.beginPath(); ctx.arc(L.x, L.y, 45, 0, 7); ctx.fill(); ctx.fillStyle = '#b3201b'; ctx.beginPath(); ctx.arc(L.x, L.y, 22, 0, 7); ctx.fill(); }
   };
 })(ATC);
 
@@ -2929,6 +3139,21 @@ const ATC = {};
         const pts = tw.nodes.map(n => ({ x: N[n].x, y: N[n].y }));
         const p = new A.Path(pts, th => th < 0.8 ? 700 : 120);
         ctx.beginPath(); p.pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke();
+      }
+      // one-way arrows (direction can flip with the runway flow)
+      ctx.fillStyle = 'rgba(242,194,48,0.85)';
+      if (sc > 0.045) for (const tw of Object.values(ap.tw)) {
+        if (!tw.oneWay) continue;
+        const L = tw.oneWay > 0 ? tw.nodes : [...tw.nodes].reverse();
+        for (let i = 1; i < L.length; i++) {
+          const a = N[L[i - 1]], b = N[L[i]]; if (a.rwy || b.rwy || a.hs || b.hs) continue;
+          const l = A.dist(a, b); if (l < 300) continue;
+          const ux = (b.x - a.x) / l, uy = (b.y - a.y) / l, k = Math.max(1, Math.floor(l / 700));
+          for (let j = 0; j < k; j++) {
+            const t = (j + 0.5) / k, cx = a.x + (b.x - a.x) * t, cy = a.y + (b.y - a.y) * t, z = A.clamp(6 / sc, 22, 60);
+            ctx.beginPath(); ctx.moveTo(cx + ux * z, cy + uy * z); ctx.lineTo(cx - ux * z * 0.6 - uy * z * 0.7, cy - uy * z * 0.6 + ux * z * 0.7); ctx.lineTo(cx - ux * z * 0.6 + uy * z * 0.7, cy - uy * z * 0.6 - ux * z * 0.7); ctx.closePath(); ctx.fill();
+          }
+        }
       }
       // hold-short bars
       ctx.strokeStyle = P.hs; ctx.lineWidth = Math.max(2, 1.2 / sc);
@@ -3242,6 +3467,15 @@ const ATC = {};
           else { ctx.globalAlpha = a; ctx.fillStyle = cols[l.c]; ctx.fillRect(x - 0.8, y - 0.8, 1.6, 1.6); }
         }
         ctx.restore();
+      }
+      // LAHSO hold-short points for aircraft cleared to land and hold short
+      for (const ac of sim.acs) {
+        if (ac.removed || !ac.lahso || !ac.rwy) continue;
+        const R = ac.rwy, u = ac.lahso.hsU, hw = 110;
+        const c = { x: R.thr.x + R.d.x * u, y: R.thr.y + R.d.y * u };
+        const [x1, y1] = this.w2s(c.x + R.left.x * hw, c.y + R.left.y * hw), [x2, y2] = this.w2s(c.x - R.left.x * hw, c.y - R.left.y * hw);
+        ctx.save(); ctx.lineCap = 'butt'; ctx.strokeStyle = '#000'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.strokeStyle = ac.lahso.bust ? '#ff4d4d' : '#ffd36b'; ctx.lineWidth = 4; ctx.setLineDash([6, 4]); ctx.stroke(); ctx.restore();
       }
       // taxi route being built
       if (this.preview && this.preview.pts.length > 1) {
@@ -3756,7 +3990,7 @@ const ATC = {};
           const wait = ac.req ? Math.round(s.t - ac.req.t) : 0;
           html += `<div class="strip ${g.toLowerCase()} ${ac.id === this.sel ? 'sel' : ''} ${ac.req ? 'req' : ''}" data-id="${ac.id}">
             <div class="s1"><b>${ac.cs}</b><span class="ty">${ac.type}/${ac.T.wakeLetter} <i>C${ac.T.srs}</i></span>${clr ? `<span class="clr">${clr}</span>` : ''}${ac.req ? `<span class="rq">${wait}s</span>` : ''}</div>
-            <div class="s2">${esc(s.status(ac))}${ac.role === 'dep' && ac.depHdg != null && ac.onGround ? ` · hdg ${A.fmtHdg(ac.depHdg)}` : ''}${ac.gate && ac.role === 'arr' ? ` · ${ac.gate}` : ''}${ac.spot && ac.role !== 'pat' && ac.role !== 'vdep' && ac.flight === 'IFR' ? ` · FBO` : ''}</div></div>`;
+            <div class="s2">${ac.role === 'dep' && ac.depDir ? `<span class="dd" title="departure direction">${ac.depDir} · ${ac.destCity}</span>` : ''}${esc(s.status(ac))}${ac.role === 'dep' && ac.depHdg != null && ac.onGround ? ` · hdg ${A.fmtHdg(ac.depHdg)}` : ''}${ac.gate && ac.role === 'arr' ? ` · ${ac.gate}` : ''}${ac.spot && ac.role !== 'pat' && ac.role !== 'vdep' && ac.flight === 'IFR' ? ` · FBO` : ''}</div></div>`;
         }
         html += '</div>';
       }
@@ -3800,14 +4034,14 @@ const ATC = {};
       const ready = s.toReady(ac);
       const crossing = ac.path && ac.path.stops.some(t => t.kind === 'rwy' && !t.cleared && t.s > ac.path.s - 10);
       const tb = this.builder(ac);
-      const key = [ac.id, ac.phase, ready, crossing, ac.pat && ac.pat.leg, !!ac.req, ac.clr.land, ac.clr.to, ac.clr.luaw, ac.onGround, ac.ho, ac.expExit, ac.expedite, tb.dest, tb.via.join(','), ac.holdPos, ac.pat && ac.pat.ext, ac.pat && ac.pat.wantFull, ac.pat && ac.pat.laps, ac.pat && ac.pat.sg, ac.pat && ac.pat.nextSg, ac.pat && ac.pat.follow, !!ac.landed, ac.rwy && ac.rwy.id].join('|');
+      const key = [ac.id, ac.phase, ready, crossing, ac.pat && ac.pat.leg, !!ac.req, ac.clr.land, ac.clr.to, ac.clr.luaw, ac.onGround, ac.ho, ac.expExit, ac.expedite, tb.dest, tb.via.join(','), ac.holdPos, ac.pat && ac.pat.ext, ac.pat && ac.pat.wantFull, ac.pat && ac.pat.laps, ac.pat && ac.pat.sg, ac.pat && ac.pat.nextSg, ac.pat && ac.pat.follow, !!ac.landed, ac.rwy && ac.rwy.id, !!ac.lahso, s.lahsoInfo && !ac.onGround ? !!s.lahsoInfo(ac) : 0].join('|');
       if (!force && this.panelKey === key) { const st = $('#pstat'); if (st) st.textContent = s.status(ac); const rq = $('#preqw'); if (rq && ac.req) rq.textContent = Math.round(s.t - ac.req.t) + 's'; return; }
       this.panelKey = key;
       let hk = 0;
       const keys = '1234567890';
       const btn = (label, cmd, cls) => { const k = hk < keys.length ? keys[hk++] : ''; return `<button class="cb ${cls || ''}" data-cmd="${esc(cmd)}"${k ? ` data-hk="${k}"` : ''}>${k ? `<i>${k}</i>` : ''}${label}</button>`; };
       const sec = (title, inner) => inner ? `<div class="sec"><div class="sech">${title}</div>${inner}</div>` : '';
-      const head = `<div class="ph"><div><b>${ac.cs}</b> <span class="fr ${ac.flight}">${ac.flight}</span><span class="pt2">${ac.type} · ${ac.T.wake === 'B757' ? 'B757' : { S: 'Small', L: 'Large', H: 'Heavy' }[ac.T.wake]} · SRS Cat ${['', 'I', 'II', 'III'][ac.T.srs]}</span></div>
+      const head = `<div class="ph"><div><b>${ac.cs}</b> <span class="fr ${ac.flight}">${ac.flight}</span>${ac.role === 'dep' && ac.depDir ? `<span class="dd">${ac.depDir}-bound · ${ac.destCity}</span>` : ''}<span class="pt2">${ac.type} · ${ac.T.wake === 'B757' ? 'B757' : { S: 'Small', L: 'Large', H: 'Heavy' }[ac.T.wake]} · SRS Cat ${['', 'I', 'II', 'III'][ac.T.srs]}</span></div>
         <div class="ps" id="pstat">${esc(s.status(ac))}</div>${ac.req ? `<div class="preq"><span id="preqw">${Math.round(s.t - ac.req.t)}s</span>“${esc(ac.req.text)}”</div>` : ''}</div>`;
       let body = '';
       const air = !ac.onGround;
@@ -3881,8 +4115,10 @@ const ATC = {};
           const exits = [...new Set((ac.rwy || s.R0).exits.map(e => e.name))];
           const exitSel = `<select data-pre="EXIT" class="csel"><option value="">Plan exit…</option>${exits.map(e => `<option>${e}</option>`).join('')}</select>`;
           const others = s.acs.filter(o => !o.removed && o !== ac && !o.onGround);
+          const LH = s.lahsoInfo(ac);
+          const lb = () => LH ? btn(`Land, hold short ${LH.name} (LAHSO)`, 'LAHSO', ac.lahso ? 'ghost' : '') : '';
           if (ac.flight === 'IFR' && !ac.pat) {
-            body += sec('Landing', `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${btn('Go around', 'GA', 'bad')}</div>`);
+            body += sec('Landing', `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${lb()}${btn('Go around', 'GA', 'bad')}</div>`);
             body += sec('Speed', `<div class="row">${btn('Final approach speed', 'FAS')}${btn('170 until 5', 'SPD 170 5')}${btn('160 until 4', 'SPD 160 4')}${btn('180 until 6', 'SPD 180 6')}${btn('Normal speed', 'NSR', 'ghost')}</div>`);
             body += sec('Runway exit', `<div class="row">${btn(ac.expExit ? 'Expedite exit ✓' : 'Expedite exit', 'EXP')}${exitSel}</div>`);
           } else {
@@ -3890,8 +4126,8 @@ const ATC = {};
             const full = !P || P.wantFull || P.laps <= 0 || ac.role === 'vin' || ac.role === 'pat-in';
             const req = full ? 'Full stop' : 'Touch and go';
             body += sec(`Landing · pilot wants ${req.toLowerCase()}`, full
-              ? `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${btn('Go around', 'GA', 'bad')}</div>`
-              : `<div class="row">${btn('Cleared touch and go', 'TG', 'go big')}${btn('Cleared to land (full stop)', 'CTL')}${btn('Go around', 'GA', 'bad')}</div>`);
+              ? `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${lb()}${btn('Go around', 'GA', 'bad')}</div>`
+              : `<div class="row">${btn('Cleared touch and go', 'TG', 'go big')}${btn('Cleared to land (full stop)', 'CTL')}${lb()}${btn('Go around', 'GA', 'bad')}</div>`);
             const sideNow = P ? (P.nextSg || P.sg) : (ac.rwy || s.R0).sideSg;
             body += sec(`Traffic pattern · ${sideNow > 0 ? 'left' : 'right'} traffic${P && P.nextSg ? ' (next circuit)' : ''}`, `<div class="row">${btn('Make left traffic', 'LCT', sideNow > 0 ? 'ghost' : '')}${btn('Make right traffic', 'RCT', sideNow < 0 ? 'ghost' : '')}</div>`);
             body += sec('Sequencing', `<div class="row">${P && P.ext ? btn('Turn base', 'TB', 'go') : btn('Extend downwind', 'ED')}${!(P && P.ext) ? btn('Turn base now', 'TB') : ''}${btn('Short approach', 'SA')}${btn('Left 360', 'L360')}${btn('Right 360', 'R360')}${btn('Caution wake', 'CWT', 'warn')}</div>
