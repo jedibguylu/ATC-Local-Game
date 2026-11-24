@@ -248,7 +248,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
 <body>
 <div id="app">
   <header id="top">
-    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v22, Nov 23">v22</small></div>
+    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v25, Nov 24">v25</small></div>
     <div class="clk"><canvas id="clockCv" style="width:36px;height:36px"></canvas><span id="ampm">AM</span></div>
     <div class="tk"><small>ATIS</small><b id="atis">-</b></div>
     <div class="tk"><small>Rwy</small><b id="rwyIn">27</b></div>
@@ -597,6 +597,17 @@ const ATC = {};
       ap.TW(id, [lanePrefix + x, id], { lead: true });
       ap.gates.push({ id, node: id, x, y, hdg: nose, push, laneY, pushE: lanePrefix + (x - push), pushW: lanePrefix + (x + push) });
     };
+    // two facing rows of GA tie-downs either side of a ramp lane
+    ap.spotRows = (xs, laneY, lanePrefix) => {
+      let n = ap.spots.length;
+      for (const x of xs) ap.spot('P' + (++n), x, laneY - 260, 0, lanePrefix);
+      for (const x of xs) ap.spot('P' + (++n), x, laneY + 260, 180, lanePrefix);
+    };
+    // remote stands: a second row of gates on the airside of the terminal lane, no jet bridges
+    ap.remote = (xs, laneY, lanePrefix) => {
+      let n = ap.gates.length;
+      for (const x of xs) { ap.gate('G' + (++n), x, laneY - 350, 180, lanePrefix, laneY, 200); ap.gates[ap.gates.length - 1].remote = true; }
+    };
     ap.spot = (id, x, y, nose, lanePrefix) => {
       ap.add(id, x, y, { spot: true, park: true });
       ap.TW(id, [lanePrefix + x, id], { lead: true });
@@ -686,11 +697,11 @@ const ATC = {};
     // paired one-way links between the parallels: Y / Z northbound, W / X southbound
     ap.TW('Y', ['A-4200', 'B-4200'], { oneWay: 1 }); ap.TW('W', ['A-4700', 'B-4700'], { oneWay: -1 });
     ap.TW('Z', ['A4200', 'B4200'], { oneWay: 1 }); ap.TW('X', ['A4700', 'B4700'], { oneWay: -1 });
-    const gx = [-2500, -1500, -500, 500, 1500, 2500];
+    const gx = [-3000, -2500, -2000, -1500, -1000, -500, 0, 500, 1000, 1500, 2000, 2500, 3000];
     ap.laneX('T', 'T', 1400, [-3600, 3600, ...gx.flatMap(x => [x, x - 200, x + 200])], { ramp: true });
     ap.laneX('U', 'U', 3100, [-3600, 3600, ...gx.flatMap(x => [x, x - 200, x + 200])], { ramp: true });
     gx.forEach((x, i) => ap.gate('G' + (i + 1), x, 1750, 0, 'T', 1400, 200));
-    gx.forEach((x, i) => ap.gate('G' + (i + 7), x, 2750, 180, 'U', 3100, 200));
+    gx.forEach((x, i) => ap.gate('G' + (i + 1 + gx.length), x, 2750, 180, 'U', 3100, 200));
     ap.TW('D', ['A-3600', 'T-3600'], { oneWay: 1 }); ap.TW('E', ['A3600', 'T3600'], { oneWay: -1 });
     ap.TW('G', ['B-3600', 'U-3600'], { oneWay: 1 }); ap.TW('H', ['B3600', 'U3600'], { oneWay: -1 });
     const spotX = [1400, 1700, 2400, 2800];
@@ -1019,9 +1030,9 @@ const ATC = {};
   const KT = A.KT, NM = A.NM;
 
   const DENSITY = {
-    light: { arrHr: 9, depHr: 8, patMax: 1, vinHr: 2 },
-    medium: { arrHr: 16, depHr: 14, patMax: 2, vinHr: 4 },
-    heavy: { arrHr: 24, depHr: 20, patMax: 3, vinHr: 6 },
+    light: { arrHr: 27, depHr: 8, patMax: 1, vinHr: 2 },
+    medium: { arrHr: 48, depHr: 14, patMax: 2, vinHr: 4 },
+    heavy: { arrHr: 72, depHr: 20, patMax: 3, vinHr: 6 },
   };
   const WX = {
     vmc: { vis: 10, ceil: null, label: 'Clear', cond: 'FEW250' },
@@ -1077,7 +1088,8 @@ const ATC = {};
     // the shift starts with the ramp already full of parked aircraft at different points in their turnaround
     populate() {
       const gates = this.ap.gates.slice().sort(() => this.rng() - 0.5);
-      const fill = this.o.density === 'light' ? 0.5 : this.o.density === 'heavy' ? 0.85 : 0.7;
+      // bigger ramps now: start them partly empty so arrivals have somewhere to go
+      const fill = this.o.density === 'light' ? 0.35 : this.o.density === 'heavy' ? 0.55 : 0.45;
       const nG = Math.max(1, Math.round(gates.length * fill));
       gates.slice(0, nG).forEach((g, i) => {
         const spec = A.makeAirliner(this.rng, this.used); if (!spec) return;
@@ -1092,7 +1104,7 @@ const ATC = {};
         const ifr = this.rng.chance(0.25);
         const spec = ifr ? A.makeGA(this.rng, this.used, ['C208', 'PC12', 'BE20']) : A.makeGA(this.rng, this.used, ['C172', 'C172', 'C172', 'PA28', 'PA28', 'SR22', 'PA44', 'BE58']);
         if (!spec) return;
-        const ac = this.makeAc(spec, { role: 'vin', flight: ifr ? 'IFR' : 'VFR', x: p.x, y: p.y, hdg: 0, phase: 'parkedArr', node: p.node, spot: p.id, parkNode: p.node });
+        const ac = this.makeAc(spec, { role: 'vin', flight: ifr ? 'IFR' : 'VFR', x: p.x, y: p.y, hdg: p.hdg, phase: 'parkedArr', node: p.node, spot: p.id, parkNode: p.node });
         p.occ = ac.id;
         const dur = this.rng.range(20, 200) + i * this.rng.range(50, 200);
         ac.turnUntil = this.t + dur; this.later(dur, () => this.turnaround(ac));
@@ -1331,7 +1343,7 @@ const ATC = {};
     spawnDeparture() {
       const g = this.freeGate(); if (!g) return false;
       const spec = A.makeAirliner(this.rng, this.used); if (!spec) return false;
-      const ac = this.makeAc(spec, { role: 'dep', flight: 'IFR', x: g.x, y: g.y, hdg: 0, phase: 'parked', node: g.node, gate: g.id });
+      const ac = this.makeAc(spec, { role: 'dep', flight: 'IFR', x: g.x, y: g.y, hdg: g.hdg, phase: 'parked', node: g.node, gate: g.id });
       g.occ = ac.id;
       ac.depOff = this.rng.pick([-40, -30, -20, 0, 0, 20, 30, 40]);
       ac.destCity = this.rng.pick(CITIES); ac.depBrg = CITY_BRG[ac.destCity]; ac.depDir = A.dirName(ac.depBrg);
@@ -1342,7 +1354,7 @@ const ATC = {};
       const s = this.freeSpot(); if (!s) return false;
       const spec = A.makeGA(this.rng, this.used, ['C172', 'C172', 'C172', 'PA28', 'PA28', 'SR22', 'PA44', 'BE58']); if (!spec) return false;
       const closed = this.rng.chance(0.7);
-      const ac = this.makeAc(spec, { role: closed ? 'pat' : 'vdep', flight: 'VFR', x: s.x, y: s.y, hdg: 0, phase: 'parked', node: s.node, spot: s.id });
+      const ac = this.makeAc(spec, { role: closed ? 'pat' : 'vdep', flight: 'VFR', x: s.x, y: s.y, hdg: s.hdg, phase: 'parked', node: s.node, spot: s.id });
       s.occ = ac.id;
       ac.pat = this.newPattern(ac);
       ac.pat.laps = this.rng.int(2, 4);
@@ -1408,7 +1420,9 @@ const ATC = {};
       // traffic mix depends on the airport: GA share goes to VFR inbounds (when VFR) or IFR GA
       // decide GA vs airline once and keep that choice until the aircraft can actually be placed
       if (!re && this.nextGA == null) this.nextGA = this.rng.chance(this.gaShare);
-      const ga = !re && this.nextGA;
+      let ga = !re && this.nextGA;
+      // if the chosen kind has nowhere to park, send the other kind rather than holding the whole stream
+      if (!re) { const fs = !!this.freeSpot(), fg = !!this.freeGate(); if (ga && !fs && fg) ga = false; else if (!ga && !fg && fs) ga = true; }
       const ok = this._spawnArrival(re, R, ga);
       if (ok && !re) this.nextGA = null;
       return ok;
@@ -1422,7 +1436,7 @@ const ATC = {};
       const T = A.TYPES[spec.type];
       const toFbo = T.kind === 'ga' || T.kind === 'bizjet';
       const park = toFbo ? this.freeSpot() : this.freeGate();
-      if (!park) return false;
+      if (!park) { this._why = 'park'; return false; }
       // spacing with the preceding IFR arrival
       const D0 = 10 * NM;
       const lead = this.lastArrival(R);
@@ -1435,7 +1449,7 @@ const ATC = {};
         const tF = D0 / gsF;
         const gapFt = (tF - tL) * (T.vapp - hw) * KT;
         const req = Math.max(3, A.arrWakeNm(lead, { T })) * NM * (this.reqFactor || 1);
-        if (gapFt < req) return false;
+        if (gapFt < req) { this._why = 'spacing'; return false; }
       }
       this.reqFactor = this.rng.range(0.8, 1.45);
       const p = this.toXY(-D0, 0);
@@ -1476,7 +1490,7 @@ const ATC = {};
         if (m > this.mult + 1e-9) { this.mult = m; this.sys(`Traffic up 10% — now ${Math.round(m * 100)}% of heavy`); }
       }
       const arrHr = this.dens.arrHr * (this.ends.length > 1 ? 1.5 : 1) * this.mult;
-      if (this.t >= n.arr) { n.arr = this.spawnArrival() ? this.t + Math.max(45 / this.mult, exp(arrHr)) : this.t + 10; }
+      if (this.t >= n.arr) { n.arr = this.spawnArrival() ? this.t + Math.max(45 / this.ends.length / this.mult, exp(arrHr)) : this.t + 10; }
       // no departures appear out of thin air: every departure is an aircraft already parked at a gate or spot
       if (this.t >= n.vin) { n.vin = (this.wx.vfr && this.dens.vinHr > 0 && this.spawnVfrIn()) ? this.t + Math.max(120 / this.mult, exp(this.dens.vinHr * this.mult)) : this.t + 60; }
       for (const r of this.requeue) if (!r.done && this.t >= r.t) { if (this.spawnArrival(r.spec)) r.done = true; else r.t = this.t + 15; }
@@ -1754,7 +1768,8 @@ const ATC = {};
           if (g) { g.occ = ac.id; g.res = null; }
           this.award(5);
           const T = ac.T;
-          const dur = (T.wake === 'H' ? this.rng.range(600, 900) : T.ga ? this.rng.range(240, 600) : this.rng.range(360, 720)) / this.mult;
+          // turnarounds: GA 1.5–3.5 min, airliners 2–4, heavies 3.5–5 (shorter as competition traffic rises)
+          const dur = (T.wake === 'H' ? this.rng.range(200, 300) : T.ga ? this.rng.range(90, 200) : this.rng.range(120, 240)) * (this.turnFactor || 1) / this.mult;
           ac.turnUntil = this.t + dur; ac.parkNode = dest.node;
           this.later(dur, () => this.turnaround(ac));
         } else ac.phase = 'stopped';
@@ -3328,7 +3343,7 @@ const ATC = {};
       }
       // jet bridges
       ctx.strokeStyle = P.bld; ctx.lineWidth = 14;
-      for (const g of ap.gates) { const k = g.hdg === 180 ? -1 : 1; ctx.beginPath(); ctx.moveTo(g.x + 40, g.y + 150 * k); ctx.lineTo(g.x + 40, g.y + 70 * k); ctx.lineTo(g.x + 15, g.y + 40 * k); ctx.stroke(); }
+      for (const g of ap.gates) { if (g.remote) continue; const k = g.hdg === 180 ? -1 : 1; ctx.beginPath(); ctx.moveTo(g.x + 40, g.y + 150 * k); ctx.lineTo(g.x + 40, g.y + 70 * k); ctx.lineTo(g.x + 15, g.y + 40 * k); ctx.stroke(); }
       // tower
       ctx.fillStyle = P.bldTop; ctx.beginPath(); ctx.arc(ap.tower.x, ap.tower.y, 45, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#4f7d9e'; ctx.lineWidth = 12; ctx.stroke();
@@ -3369,7 +3384,7 @@ const ATC = {};
         }
         if (sc > 0.16) { ctx.font = `700 ${fs - 2}px ui-monospace, Menlo, monospace`; for (const n of Object.values(N)) if (n.hs) { const tw = ap.tw[n.tws[0]]; const r = tw && tw.nodes.map(q => N[q]).find(q => q.rwy); if (r) sign(r.rwyId.replace('/', '-'), n.x - 75, n.y, '#b3201b', '#fff'); } ctx.font = `600 ${fs}px ui-monospace, Menlo, Consolas, monospace`; }
         for (const g of ap.gates) sign(g.id, g.x, g.y + (g.hdg === 180 ? -95 : 95), '#1e2833', '#cfd8e3');
-        for (const s of ap.spots) sign(s.id, s.x, s.y - 80, '#1e2833', '#cfd8e3');
+        for (const s of ap.spots) sign(s.id, s.x, s.y + (s.hdg === 180 ? 80 : -80), '#1e2833', '#cfd8e3');
         const [tx, ty] = this.w2s(ap.tower.x, ap.tower.y);
         ctx.fillStyle = '#9fb3c8'; ctx.fillText('TWR', tx, ty + 14);
         for (const b of ap.buildings) if (b.label) { const xs = b.pts.map(p => p[0]), ys = b.pts.map(p => p[1]); const [bx, by] = this.w2s((Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2); ctx.fillStyle = '#2a2f36'; ctx.fillText(b.label, bx, by); }
