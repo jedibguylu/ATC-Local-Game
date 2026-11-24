@@ -362,7 +362,9 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <b>Go-arounds</b><span>A go-around flying over the runway doesn't count against SRS</span>
     <b>Delays</b><span>Any aircraft kept waiting 5 minutes anywhere but its gate or parking spot (stopped on a taxiway, holding short, in position, or calling you without an answer) costs 15 points, and again every further 5 minutes</span>
     <b>Competition</b><span>Heavy traffic to start, +10% every 10 minutes, 1× speed only, and pausing hides the scope. The shift ends when the score drops below zero; your best score of the shift goes on that airport's leaderboard</span>
-    <b>LAHSO</b><span>On KTTX, "Land, hold short" appears when the arrival can stop and turn off before the crossing runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). A LAHSO arrival and traffic on the crossing runway don't have to wait for each other; the hold-short point shows as a dashed bar</span>
+    <b>Side-step</b><span>KTTP: an IFR arrival at least 2.5 nm out can be moved to the parallel runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). It needs a new landing clearance for the new runway</span>
+    <b>Circle to land</b><span>KTTX: an IFR arrival flies the approach to its runway, levels at circling altitude, breaks off about 2 nm out and circles to the crossing runway. It calls when it breaks off and asks for landing clearance on final; a go-around becomes a missed approach</span>
+    <b>LAHSO</b><span>On KTTX, "Land, hold short" appears when the arrival can stop and turn off before the crossing runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). A LAHSO arrival and traffic on the crossing runway don't have to wait for each other, and you may use the runway beyond its hold-short point (dashed bar) — anything short of the bar still has to be clear</span>
     <b>Departure direction</b><span>Departure strips show the direction of flight and destination (e.g. SE · ATL) — on KTTP send southbound traffic to the south runway and northbound traffic to the north one</span>
     <b>One-way taxiways</b><span>Yellow arrows show one-way taxiways. The ramp exits flip with the runway flow: on the 9s D (and G on KTTP) is out and E (and H) is in; on the 27s it's the reverse. Y/Z run northbound, W/X southbound</span>
   </div><div class="sep">
@@ -1032,7 +1034,7 @@ const ATC = {};
     takeoff: 'Takeoff roll', climb: 'Departure', pattern: 'Pattern', inbound: 'Inbound', final: 'Final',
     rollout: 'Rollout', exiting: 'Exiting', stopped: 'Holding', missed: 'Missed approach', parkedArr: 'At gate',
   };
-  const KEYWORDS = new Set(['LAHSO', 'CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
+  const KEYWORDS = new Set(['LAHSO', 'SIDESTEP', 'CIRCLE', 'CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
     'EXIT', 'EXP', 'ELD', 'ERD', 'ELB', 'ERB', 'SI', 'LCT', 'RCT', 'MLT', 'MRT', 'ED', 'TB', 'SA', 'L360', 'R360', 'FOLLOW', 'FLW', 'TFC', 'CWT', 'HO', 'CD', 'OC', 'RH', 'EXP']);
 
   A.Sim = class {
@@ -1905,6 +1907,31 @@ const ATC = {};
       }
       return best;
     }
+    // side-step: an IFR arrival moves to the parallel runway (same direction) — visual, ceiling ≥ 1000 / vis ≥ 3 SM, ≥ 2.5 nm out
+    sideStepEnds(ac) {
+      if (!ac.rwy || ac.onGround || ac.phase !== 'final' || ac.pat || ac.circle) return [];
+      if (this.wx.ceilFt < 1000 || this.wx.visFt < 3 * 5280) return [];
+      const R = ac.rwy; if (-this.frR(ac, R).u < 2.5 * NM) return [];
+      return this.ends.filter(e => e.rwyId !== R.rwyId && Math.abs(A.angDiff(e.H, R.H)) < 5 && !e.crossU[R.rwyId]);
+    }
+    // circle to land: fly the approach to one runway, then circle at MDA to land on a crossing runway
+    circleEnds(ac) {
+      if (!ac.rwy || ac.onGround || ac.phase !== 'final' || ac.pat || ac.circle || ac.flight !== 'IFR') return [];
+      if (this.wx.ceilFt < 1000 || this.wx.visFt < 3 * 5280) return [];
+      const R = ac.rwy; if (-this.frR(ac, R).u < 2.2 * NM) return [];
+      return this.ends.filter(e => e.rwyId !== R.rwyId && R.crossU[e.rwyId] != null);
+    }
+    breakCircle(ac) {
+      const T = this.endsById[ac.circle.to]; ac.rwy = T; this.use(ac);
+      const P = ac.pat = this.newPattern(ac);
+      P.off = ac.T.ga ? 3500 : 5500; P.alt = ac.T.ga ? 700 : 900; P.wantFull = true; P.calledMid = true; P.laps = 0;
+      const f = this.fr(ac); P.sg = f.v >= 0 ? 1 : -1;
+      ac.phase = 'pattern'; ac.clr.land = null; ac.askedLand = false; ac.occCheck = false; ac.prevU = undefined; ac.fas = false; ac.spdA = null;
+      if (f.u < -2500) { P.bp = this.toXY(-Math.max(3500, P.off * 0.8), P.off * P.sg); P.leg = 'tobase'; }
+      else P.leg = 'downwind';
+      ac.circle.broke = true;
+      this.pilot(ac, `Tower, ${ac.say}, circling to runway ${T.id}, ${P.sg > 0 ? 'left' : 'right'} ${P.leg === 'downwind' ? 'downwind' : 'base'}.`, 'req');
+    }
     srsViol(text) { this.score.srs++; this.incident('SRS', text, 50); }
     // intersecting runways (7110.65 3-9-8 / 3-10-4): traffic on the crossing runway must be past the intersection
     crossChecks(ac, kind) {
@@ -1925,11 +1952,14 @@ const ATC = {};
         }
       }
     }
+    // a LAHSO arrival never rolls past its hold-short point, so the runway beyond it may stay in use
+    pastLahso(ac, o, fo) { return !!(ac.lahso && !ac.lahso.bust && fo.u - (o.T ? o.T.len / 2 : 0) > ac.lahso.hsU + 120); }
     onThreshold(ac) {
       if (ac.clr.land === 'la') return;
       for (const o of this.acs) {
         if (o === ac || o.removed) continue;
         const fo = this.fr(o);
+        if (this.pastLahso(ac, o, fo)) continue;
         if (this.onRunway(o)) {
           if ((o.phase === 'rollout' || o.phase === 'exiting') && fo.u > 0) {
             const req = A.srsReq(ac, o);
@@ -1971,7 +2001,7 @@ const ATC = {};
       for (const o of this.acs) {
         if (o === ac || o.removed || !this.onRunway(o)) continue;
         const fo = this.fr(o);
-        if (fo.u > 4600) continue;
+        if (fo.u > 4600 || this.pastLahso(ac, o, fo)) continue;
         if (o.phase === 'takeoff' && o.spd > 70 * KT) continue;
         if ((o.phase === 'rollout' || o.phase === 'exiting') && fo.u > 4500) continue;
         return o;
@@ -2197,6 +2227,11 @@ const ATC = {};
         const L = this.byCs(ac.pat.follow);
         if (L && !L.onGround && L.phase === 'final' && A.dist(L, ac) < 1.3 * NM) spdT = Math.min(spdT, Math.max(L.ias, ac.vapp - 5));
       }
+      if (ac.circle && !ac.circle.broke) {
+        if (dist <= 1.8 * NM) { this.breakCircle(ac); return; }
+        this.airMove(ac, dt, this.lineTrack(ac, this.thr, this.H, 35, false), Math.max(this.elev + 50 + dist * A.GS_TAN, this.elev + (ac.T.ga ? 700 : 900)), Math.min(spdT, ac.vapp + 15));
+        return;
+      }
       let altT = this.elev + 50 + Math.max(0, dist) * A.GS_TAN;
       let vsFF = -ac.gsFps * A.GS_TAN * 60;
       const L = ac.clr.land;
@@ -2237,6 +2272,7 @@ const ATC = {};
       else if (kind === 'ctrl') { this.score.ctrlGA++; this.score.pts -= 10; this.sys(`${ac.cs} go-around issued (−10)`); }
       else if (kind === true) { this.score.goarounds++; this.pilot(ac, `Tower, ${ac.say}, going around, ${reason}.`, 'req'); }
       else { this.score.goarounds++; this.incident('Go-around', `${ac.cs} went around — ${reason}`, reason.includes('clearance') ? 30 : 25, ac); this.pilot(ac, `Tower, ${ac.say}, going around, ${reason}.`, 'req'); }
+      if (ac.circle) { ac.circle = null; ac.pat = null; ac.phase = 'missed'; return; }
       if (ac.pat) { ac.phase = 'pattern'; ac.pat.leg = 'upwind'; ac.pat.follow = null; ac.pat.inSight = false; if (ac.role === 'vin') ac.role = 'pat'; }
       else { ac.phase = 'missed'; }
     }
@@ -2444,6 +2480,21 @@ const ATC = {};
             ac.clr.land = 'full'; ac.lahso = L; ac.req = null;
             if (ac.pat) ac.pat.wantFull = true;
             push(`wind ${this.windStr()}, runway ${rwy} cleared to land, hold short of runway ${L.name}`, `cleared to land runway ${rwy}, holding short of runway ${L.name}`);
+            break;
+          }
+          case 'SIDESTEP': {
+            const to = this.endsById[toks[i]]; i++;
+            if (!to || !this.sideStepEnds(ac).includes(to)) { err = 'unable side-step'; break; }
+            ac.rwy = to; this.use(ac); rwy = to.id;
+            ac.clr.land = null; ac.lahso = null; ac.askedLand = false; ac.occCheck = false; ac.prevU = undefined;
+            push(`side-step to runway ${rwy}`, `side-step runway ${rwy}`);
+            break;
+          }
+          case 'CIRCLE': {
+            const to = this.endsById[toks[i]]; i++;
+            if (!to || !this.circleEnds(ac).includes(to)) { err = 'unable to circle'; break; }
+            ac.circle = { from: ac.rwy.id, to: to.id }; ac.lahso = null; ac.clr.land = null; ac.askedLand = true; ac.req = null;
+            push(`circle to land runway ${to.id}`, `circle to land runway ${to.id}, will report breaking off the approach`);
             break;
           }
           case 'CTL': case 'FS': case 'TG': case 'OPT': case 'LA': {
@@ -2736,6 +2787,7 @@ const ATC = {};
       return ac.phase;
     }
     clrTag(ac) {
+      if (ac.circle && !ac.clr.land) return `CIRC ${ac.circle.to}`;
       if (ac.clr.land) return ac.lahso ? 'CTL·HS' : { full: 'CTL', tg: 'T&G', opt: 'OPT', la: 'LA' }[ac.clr.land];
       if (ac.clr.to && ['taxi', 'hs', 'lineup', 'luaw', 'takeoff'].includes(ac.phase)) return 'CTO';
       if (ac.clr.luaw && ['taxi', 'hs', 'lineup', 'luaw'].includes(ac.phase)) return 'LUAW';
@@ -4215,7 +4267,7 @@ const ATC = {};
       const ready = s.toReady(ac);
       const crossing = ac.path && ac.path.stops.some(t => t.kind === 'rwy' && !t.cleared && t.s > ac.path.s - 10);
       const tb = this.builder(ac);
-      const key = [ac.id, ac.phase, ready, crossing, ac.pat && ac.pat.leg, !!ac.req, ac.clr.land, ac.clr.to, ac.clr.luaw, ac.onGround, ac.ho, ac.expExit, ac.expedite, tb.dest, tb.via.join(','), ac.holdPos, ac.pat && ac.pat.ext, ac.pat && ac.pat.wantFull, ac.pat && ac.pat.laps, ac.pat && ac.pat.sg, ac.pat && ac.pat.nextSg, ac.pat && ac.pat.follow, !!ac.landed, ac.rwy && ac.rwy.id, !!ac.lahso, s.lahsoInfo && !ac.onGround ? !!s.lahsoInfo(ac) : 0].join('|');
+      const key = [ac.id, ac.phase, ready, crossing, ac.pat && ac.pat.leg, !!ac.req, ac.clr.land, ac.clr.to, ac.clr.luaw, ac.onGround, ac.ho, ac.expExit, ac.expedite, tb.dest, tb.via.join(','), ac.holdPos, ac.pat && ac.pat.ext, ac.pat && ac.pat.wantFull, ac.pat && ac.pat.laps, ac.pat && ac.pat.sg, ac.pat && ac.pat.nextSg, ac.pat && ac.pat.follow, !!ac.landed, ac.rwy && ac.rwy.id, !!ac.lahso, ac.circle && ac.circle.broke, !ac.onGround && ac.phase === 'final' ? s.sideStepEnds(ac).length + s.circleEnds(ac).length : 0, s.lahsoInfo && !ac.onGround ? !!s.lahsoInfo(ac) : 0].join('|');
       if (!force && this.panelKey === key) { const st = $('#pstat'); if (st) st.textContent = s.status(ac); const rq = $('#preqw'); if (rq && ac.req) rq.textContent = Math.round(s.t - ac.req.t) + 's'; return; }
       this.panelKey = key;
       let hk = 0;
@@ -4298,8 +4350,10 @@ const ATC = {};
           const others = s.acs.filter(o => !o.removed && o !== ac && !o.onGround);
           const LH = s.lahsoInfo(ac);
           const lb = () => LH ? btn(`Land, hold short ${LH.name} (LAHSO)`, 'LAHSO', ac.lahso ? 'ghost' : '') : '';
-          if (ac.flight === 'IFR' && !ac.pat) {
-            body += sec('Landing', `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${lb()}${btn('Go around', 'GA', 'bad')}</div>`);
+          const alt = () => { const ss = s.sideStepEnds(ac), cc = s.circleEnds(ac);
+            return ss.length || cc.length ? `<div class="row">${ss.map(e => btn(`Side-step ${e.id}`, `SIDESTEP ${e.id}`)).join('')}${cc.map(e => btn(`Circle to land ${e.id}`, `CIRCLE ${e.id}`)).join('')}</div>` : ''; };
+          if (ac.flight === 'IFR' && (!ac.pat || ac.circle)) {
+            body += sec(ac.circle && !ac.circle.broke ? `Landing — circling to ${ac.circle.to}` : 'Landing', `<div class="row">${btn('Cleared to land', 'CTL', 'go big')}${lb()}${btn('Go around', 'GA', 'bad')}</div>${alt()}`);
             body += sec('Speed', `<div class="row">${btn('Final approach speed', 'FAS')}${btn('170 until 5', 'SPD 170 5')}${btn('160 until 4', 'SPD 160 4')}${btn('180 until 6', 'SPD 180 6')}${btn('Normal speed', 'NSR', 'ghost')}</div>`);
             body += sec('Runway exit', `<div class="row">${btn(ac.expExit ? 'Expedite exit ✓' : 'Expedite exit', 'EXP')}${exitSel}</div>`);
           } else {
