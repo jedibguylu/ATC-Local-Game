@@ -147,6 +147,10 @@ table.cmds td:nth-child(3){color:var(--faint);font-family:var(--mono);white-spac
 .rgrid b{font-family:var(--mono);text-align:right}
 .inc{font-size:12px;padding:4px 0;border-bottom:1px solid #1c2733;color:#c6d0db}
 .inc span{font-family:var(--mono);color:var(--faint);margin-right:6px} .inc b{color:var(--red);margin-right:4px} .inc em{color:var(--red);font-style:normal;font-family:var(--mono)}
+.ver{font:600 10px ui-monospace,Menlo,monospace;color:var(--dim);letter-spacing:.04em;margin-left:4px;border:1px solid var(--line);border-radius:4px;padding:1px 5px;vertical-align:middle}
+#start .card{position:relative}
+.xclose{position:absolute;top:14px;right:14px;width:34px;height:34px;border-radius:50%;background:none;border:1px solid var(--line);color:var(--dim);font-size:16px;cursor:pointer;line-height:1}
+.xclose:hover{color:#fff;border-color:#6b7b8e}
 .x{float:right;background:none;border:1px solid var(--line);border-radius:5px;cursor:pointer;padding:3px 9px;color:var(--dim)}
 .sep{display:grid;grid-template-columns:auto 1fr;gap:3px 14px;font-size:12px;color:#c6d0db}
 .sep b{font-family:var(--mono);color:var(--cyan)}
@@ -244,7 +248,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
 <body>
 <div id="app">
   <header id="top">
-    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span></div>
+    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v22, Nov 23">v22</small></div>
     <div class="clk"><canvas id="clockCv" style="width:36px;height:36px"></canvas><span id="ampm">AM</span></div>
     <div class="tk"><small>ATIS</small><b id="atis">-</b></div>
     <div class="tk"><small>Rwy</small><b id="rwyIn">27</b></div>
@@ -286,6 +290,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
 </div>
 
 <div class="modal" id="start"><div class="card">
+  <button class="xclose" id="startClose" title="Back to your shift" aria-label="Back to your shift" style="display:none">✕</button>
   <h1>LOCAL CONTROL</h1>
   <h2>Tower simulator — combined Local &amp; Ground</h2>
   <h3>Mode</h3>
@@ -3858,9 +3863,10 @@ const ATC = {};
       $('#helpBtn').onclick = () => this.modal('#help', true);
       $('#reportBtn').onclick = () => { this.renderReport(); this.modal('#report', true); };
       $('#newBtn').onclick = () => {
-        if (this.comp && this.sim && !this.sim.over && !confirm('Abandon this competition shift? It will not be recorded.')) return;
-        this.paused = true; this.syncTop(); this.showStart();
+        this.resumePaused = this.paused;
+        this.paused = true; this.syncTop(); this.showStart(true);
       };
+      $('#startClose').onclick = () => this.closeStart();
       $('#boardBtn').onclick = () => this.showBoard();
       $('#overNew').onclick = () => { this.modal('#over', false); this.showStart(); };
       $('#overReport').onclick = () => { this.renderReport(); this.modal('#report', true); };
@@ -3884,6 +3890,7 @@ const ATC = {};
         lv(); speechSynthesis.onvoiceschanged = lv;
       }
       window.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && $('#start').classList.contains('open') && $('#startClose').style.display !== 'none') { this.closeStart(); return; }
         if (!this.sim || document.querySelector('.modal.open')) return;
         const tag = (document.activeElement || {}).tagName;
         if (tag === 'SELECT' || tag === 'INPUT') { if (e.key === 'Escape') document.activeElement.blur(); return; }
@@ -3944,9 +3951,18 @@ const ATC = {};
       const qb = $('#reqBadge'); if (qb) { qb.textContent = n || ''; qb.classList.toggle('show', !!n); }
     }
     modal(sel, open) { $(sel).classList.toggle('open', open); }
-    showStart() { this.modal('#start', true); }
+    showStart(canReturn) {
+      $('#startClose').style.display = canReturn && this.sim && !this.sim.over ? '' : 'none';
+      this.modal('#start', true);
+    }
+    closeStart() {
+      if (!this.sim || this.sim.over) return;
+      this.modal('#start', false);
+      this.paused = !!this.resumePaused; this.syncTop();
+    }
     start() {
       const v = n => (document.querySelector(`input[name=${n}]:checked`) || {}).value;
+      if (this.comp && this.sim && !this.sim.over && !confirm('Abandon your competition shift? It will not be recorded.')) return;
       const mode = v('mode') || 'endless';
       this.comp = mode === 'comp'; this.overShown = false; this.modal('#over', false);
       if (this.comp) { this.pname = ($('#pname').value || '').trim().slice(0, 20); try { localStorage.setItem('lc_name', this.pname); } catch (e) { /* no storage */ } }
