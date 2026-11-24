@@ -291,7 +291,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
   <h3>Mode</h3>
   <div class="maps modes">
     <label><input type="radio" name="mode" value="endless" checked><span><b>Endless</b><em>Pick the traffic level and work as long as you like. The shift never ends.</em></span></label>
-    <label><input type="radio" name="mode" value="comp"><span><b>Competition</b><em>Starts at heavy traffic and adds 10% every 5 minutes. 1× speed only. The shift ends the moment your score drops below zero; your best score goes on the map's leaderboard.</em></span></label>
+    <label><input type="radio" name="mode" value="comp"><span><b>Competition</b><em>Starts at heavy traffic and adds 10% every 10 minutes. 1× speed only. The shift ends the moment your score drops below zero; your best score goes on the map's leaderboard.</em></span></label>
   </div>
   <div id="compName" style="display:none"><h3>Name for the leaderboard</h3><input id="pname" maxlength="20" placeholder="optional" autocomplete="off"></div>
   <h3>Airport</h3>
@@ -360,8 +360,8 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <b>Dep behind arrival</b><span>Arrival must be off the runway before the roll</span>
     <b>Crossing runways</b><span>Traffic on the intersecting runway must be past the intersection before a departure rolls or an arrival crosses the threshold</span>
     <b>Go-arounds</b><span>A go-around flying over the runway doesn't count against SRS</span>
-    <b>Delays</b><span>Any aircraft kept waiting 3 minutes anywhere but its gate or parking spot (stopped on a taxiway, holding short, in position, or calling you without an answer) costs 30 points, and again every further 3 minutes</span>
-    <b>Competition</b><span>Heavy traffic to start, +10% every 5 minutes, 1× speed only, and pausing hides the scope. The shift ends when the score drops below zero; your best score of the shift goes on that airport's leaderboard</span>
+    <b>Delays</b><span>Any aircraft kept waiting 5 minutes anywhere but its gate or parking spot (stopped on a taxiway, holding short, in position, or calling you without an answer) costs 15 points, and again every further 5 minutes</span>
+    <b>Competition</b><span>Heavy traffic to start, +10% every 10 minutes, 1× speed only, and pausing hides the scope. The shift ends when the score drops below zero; your best score of the shift goes on that airport's leaderboard</span>
     <b>LAHSO</b><span>On KTTX, "Land, hold short" appears when the arrival can stop and turn off before the crossing runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). A LAHSO arrival and traffic on the crossing runway don't have to wait for each other; the hold-short point shows as a dashed bar</span>
     <b>Departure direction</b><span>Departure strips show the direction of flight and destination (e.g. SE · ATL) — on KTTP send southbound traffic to the south runway and northbound traffic to the north one</span>
     <b>One-way taxiways</b><span>Yellow arrows show one-way taxiways. The ramp exits flip with the runway flow: on the 9s D (and G on KTTP) is out and E (and H) is in; on the 27s it's the reverse. Y/Z run northbound, W/X southbound</span>
@@ -1038,7 +1038,7 @@ const ATC = {};
   A.Sim = class {
     constructor(o) {
       this.o = Object.assign({ density: 'medium', seed: (Date.now() % 1e9), timeScale: 144, mode: 'endless' }, o || {});
-      // competition: starts at heavy traffic, +10% traffic every 5 minutes, shift ends when the score goes negative
+      // competition: starts at heavy traffic, +10% traffic every 10 minutes, shift ends when the score goes negative
       if (this.o.mode === 'comp') this.o.density = 'heavy';
       this.mult = 1; this.peak = 0; this.over = false;
       this.rng = A.rng(this.o.seed);
@@ -1091,12 +1091,14 @@ const ATC = {};
         ac.turnUntil = this.t + dur; this.later(dur, () => this.turnaround(ac));
       });
       // shuffle who calls first so a shift never opens the same way: pull one random stream to the front
+      // someone always calls the moment the position opens; who it is stays random
       const pick = this.rng.int(0, 2);
-      const early = this.rng.range(4, 25);
+      const early = 0.3;
       if (pick === 0) this.next.arr = early;
       else {
-        const want = pick === 1 ? (a => a.gate) : (a => a.spot);
-        const L = this.acs.filter(a => a.phase === 'parkedArr' && want(a));
+        const want = pick === 1 ? (a => a.gate) : (a => a.spot && (a.airline || a.flight === 'IFR' || this.wx.vfr));
+        let L = this.acs.filter(a => a.phase === 'parkedArr' && want(a));
+        if (!L.length) L = this.acs.filter(a => a.phase === 'parkedArr' && (a.gate || a.airline || a.flight === 'IFR' || this.wx.vfr));
         if (L.length) {
           const a = this.rng.pick(L);
           this.timers = this.timers.filter(t => !(t.ac === a));
@@ -1281,7 +1283,7 @@ const ATC = {};
       this.say('sys', ac || null, `⚠ ${kind}: ${text} (−${pts})`, 'bad');
     }
     award(pts) { this.score.pts += pts; }
-    // an aircraft held up anywhere but its gate or parking spot: −30 for every 3 minutes it waits
+    // an aircraft held up anywhere but its gate or parking spot: −15 for every 5 minutes it waits
     isWaiting(ac) {
       if (ac.removed || ac.phase === 'parked' || ac.phase === 'parkedArr') return false;
       if (ac.req) return true;
@@ -1293,9 +1295,9 @@ const ATC = {};
       for (const ac of this.acs) {
         if (!this.isWaiting(ac)) { ac.waitT = 0; continue; }
         ac.waitT = (ac.waitT || 0) + dt;
-        if (ac.waitT >= 180) {
+        if (ac.waitT >= 300) {
           ac.waitT = 0; this.score.delays = (this.score.delays || 0) + 1;
-          this.incident('Delay', `${ac.cs} has been waiting 3 minutes (${this.status(ac)})`, 30, ac);
+          this.incident('Delay', `${ac.cs} has been waiting 5 minutes (${this.status(ac)})`, 15, ac);
         }
       }
     }
@@ -1377,7 +1379,7 @@ const ATC = {};
         if (this.rng.chance(0.35)) { ac.role = 'vdep'; ac.vfrDirName = this.rng.pick(['north', 'south', 'east', 'west']); ac.vfrDir = { north: 0, south: 180, east: 90, west: 270 }[ac.vfrDirName]; }
         ac.intent = ac.role === 'pat' ? 'closed traffic' : `VFR departure to the ${ac.vfrDirName}`;
       }
-      const d = this.rng.range(3, 20);
+      const d = old._early ? 0.2 : this.rng.range(3, 20);
       if (g) this.later(d, () => this.request(ac, 'push', `Ground, ${ac.say}, gate ${g.id}, request pushback with information ${this.atis}.`));
       else this.later(d, () => this.request(ac, 'taxi', ifr
         ? `Ground, ${ac.say}, at the FBO, spot ${sp.id}, IFR to ${ac.destCity}, ready to taxi with ${this.atis}.`
@@ -1463,7 +1465,7 @@ const ATC = {};
       const exp = (perHr) => perHr > 0 ? -Math.log(1 - this.rng()) * 3600 / perHr : 1e9;
       const n = this.next;
       if (this.o.mode === 'comp') {
-        const lvl = Math.floor(this.t / 300), m = Math.pow(1.1, lvl);
+        const lvl = Math.floor(this.t / 600), m = Math.pow(1.1, lvl);
         if (m > this.mult + 1e-9) { this.mult = m; this.sys(`Traffic up 10% — now ${Math.round(m * 100)}% of heavy`); }
       }
       const arrHr = this.dens.arrHr * (this.ends.length > 1 ? 1.5 : 1) * this.mult;
@@ -4084,7 +4086,7 @@ const ATC = {};
       const s = this.sim, mapKey = s.ap.key, mins = Math.round(s.t / 60);
       const entry = { map: mapKey, name: this.pname || '', score: Math.max(0, Math.round(s.peak)), minutes: mins, traffic: Math.round(s.mult * 100), landed: s.score.landed, departed: s.score.departed };
       $('#overSub').textContent = `${s.ap.icao} · ${A.MAP_INFO[mapKey].name}`;
-      $('#overStats').innerHTML = [['Best score', entry.score], ['Final score', s.score.pts], ['Time on position', `${mins} min`], ['Traffic reached', `${entry.traffic}% of heavy`], ['Landed / departed', `${entry.landed} / ${entry.departed}`], ['Delays (3 min)', s.score.delays || 0]].map(r => `<div>${r[0]}</div><b>${r[1]}</b>`).join('');
+      $('#overStats').innerHTML = [['Best score', entry.score], ['Final score', s.score.pts], ['Time on position', `${mins} min`], ['Traffic reached', `${entry.traffic}% of heavy`], ['Landed / departed', `${entry.landed} / ${entry.departed}`], ['Delays (5 min)', s.score.delays || 0]].map(r => `<div>${r[0]}</div><b>${r[1]}</b>`).join('');
       $('#overSaved').textContent = 'Saving score…'; $('#overBoard').innerHTML = '';
       this.modal('#over', true); this.syncTop();
       try {
