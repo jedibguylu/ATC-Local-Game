@@ -248,7 +248,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
 <body>
 <div id="app">
   <header id="top">
-    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v25, Nov 24">v25</small></div>
+    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v26, Nov 24">v26</small></div>
     <div class="clk"><canvas id="clockCv" style="width:36px;height:36px"></canvas><span id="ampm">AM</span></div>
     <div class="tk"><small>ATIS</small><b id="atis">-</b></div>
     <div class="tk"><small>Rwy</small><b id="rwyIn">27</b></div>
@@ -367,6 +367,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
     <b>Go-arounds</b><span>A go-around flying over the runway doesn't count against SRS</span>
     <b>Delays</b><span>Any aircraft kept waiting 5 minutes anywhere but its gate or parking spot (stopped on a taxiway, holding short, in position, or calling you without an answer) costs 15 points, and again every further 5 minutes</span>
     <b>Competition</b><span>Heavy traffic to start, +10% every 10 minutes, 1× speed only, and pausing hides the scope. The shift ends when the score drops below zero; your best score of the shift goes on that airport's leaderboard</span>
+    <b>VFR arrivals</b><span>Inbound VFR traffic can be given headings, told to cross midfield (500 ft above pattern altitude, then onto downwind), or sent to downwind, base or a straight-in. KTTP and KTTX have no pattern work: VFR departures leave on course and VFR arrivals land full stop</span>
     <b>Side-step</b><span>KTTP: an IFR arrival at least 2.5 nm out can be moved to the parallel runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). It needs a new landing clearance for the new runway</span>
     <b>Circle to land</b><span>KTTX: an IFR arrival flies the approach to its runway, levels at circling altitude, breaks off about 2 nm out and circles to the crossing runway. It calls when it breaks off and asks for landing clearance on final; a go-around becomes a missed approach</span>
     <b>LAHSO</b><span>On KTTX, "Land, hold short" appears when the arrival can stop and turn off before the crossing runway (ceiling ≥ 1,000 ft, visibility ≥ 3 SM). A LAHSO arrival and traffic on the crossing runway don't have to wait for each other, and you may use the runway beyond its hold-short point (dashed bar) — anything short of the bar still has to be clear</span>
@@ -682,7 +683,7 @@ const ATC = {};
   };
   /* ---------------- KTTP: parallel runways, airline hub ---------------- */
   MAPS.parallel = () => {
-    const ap = Builder({ key: 'parallel', name: 'Tower Trainer Intl', icao: 'KTTP', elev: 4850, theme: 'mountains', tower: { x: 0, y: 2280 },
+    const ap = Builder({ noPattern: true, key: 'parallel', name: 'Tower Trainer Intl', icao: 'KTTP', elev: 4850, theme: 'mountains', tower: { x: 0, y: 2280 },
       gaShare: 0.2, patMax: 1, fbo: { x: 2300, y: -1300 }, terminal: { x: 0, y: 2250 } });
     const R1 = ap.runway('9R', '27L', { x: -5000, y: 0 }, { x: 5000, y: 0 }, 150, 'R', 'L');
     const R2 = ap.runway('9L', '27R', { x: -4500, y: 4000 }, { x: 4500, y: 4000 }, 150, 'L', 'R');
@@ -723,7 +724,7 @@ const ATC = {};
   };
   /* ---------------- KTTX: crossing runways ---------------- */
   MAPS.cross = () => {
-    const ap = Builder({ key: 'cross', name: 'Tower Trainer Municipal', icao: 'KTTX', elev: 20, theme: 'coast', tower: { x: 150, y: 2050 },
+    const ap = Builder({ noPattern: true, key: 'cross', name: 'Tower Trainer Municipal', icao: 'KTTX', elev: 20, theme: 'coast', tower: { x: 150, y: 2050 },
       gaShare: 0.5, patMax: 2, fbo: { x: 2900, y: -1300 }, terminal: { x: -1900, y: 1700 } });
     const R1 = ap.runway('9', '27', { x: -4500, y: 0 }, { x: 4500, y: 0 }, 150, 'R', 'L');
     const R2 = ap.runway('18', '36', { x: 1000, y: 4000 }, { x: 1000, y: -3500 }, 150, 'L', 'R');
@@ -1050,7 +1051,7 @@ const ATC = {};
     takeoff: 'Takeoff roll', climb: 'Departure', pattern: 'Pattern', inbound: 'Inbound', final: 'Final',
     rollout: 'Rollout', exiting: 'Exiting', stopped: 'Holding', missed: 'Missed approach', parkedArr: 'At gate',
   };
-  const KEYWORDS = new Set(['LAHSO', 'SIDESTEP', 'CIRCLE', 'CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
+  const KEYWORDS = new Set(['XML', 'XMR', 'LAHSO', 'SIDESTEP', 'CIRCLE', 'CTL', 'FS', 'TG', 'OPT', 'LA', 'GA', 'FAS', 'SPD', 'NSR', 'LUAW', 'LUW', 'CTO', 'IMM', 'CAN', 'TAXI', 'VIA', 'HS', 'CROSS', 'HOLD', 'CONT', 'PUSH', 'PB',
     'EXIT', 'EXP', 'ELD', 'ERD', 'ELB', 'ERB', 'SI', 'LCT', 'RCT', 'MLT', 'MRT', 'ED', 'TB', 'SA', 'L360', 'R360', 'FOLLOW', 'FLW', 'TFC', 'CWT', 'HO', 'CD', 'OC', 'RH', 'EXP']);
 
   A.Sim = class {
@@ -1353,7 +1354,7 @@ const ATC = {};
     spawnGA() {
       const s = this.freeSpot(); if (!s) return false;
       const spec = A.makeGA(this.rng, this.used, ['C172', 'C172', 'C172', 'PA28', 'PA28', 'SR22', 'PA44', 'BE58']); if (!spec) return false;
-      const closed = this.rng.chance(0.7);
+      const closed = !this.ap.noPattern && this.rng.chance(0.7);
       const ac = this.makeAc(spec, { role: closed ? 'pat' : 'vdep', flight: 'VFR', x: s.x, y: s.y, hdg: s.hdg, phase: 'parked', node: s.node, spot: s.id });
       s.occ = ac.id;
       ac.pat = this.newPattern(ac);
@@ -1395,7 +1396,7 @@ const ATC = {};
       ac.destCity = this.rng.pick(CITIES); ac.depBrg = CITY_BRG[ac.destCity]; ac.depDir = A.dirName(ac.depBrg);
       if (!ifr) {
         ac.pat = this.newPattern(ac); ac.pat.laps = this.rng.int(2, 4);
-        if (this.rng.chance(0.35)) { ac.role = 'vdep'; ac.vfrDirName = this.rng.pick(['north', 'south', 'east', 'west']); ac.vfrDir = { north: 0, south: 180, east: 90, west: 270 }[ac.vfrDirName]; }
+        if (this.ap.noPattern || this.rng.chance(0.35)) { ac.role = 'vdep'; ac.vfrDirName = this.rng.pick(['north', 'south', 'east', 'west']); ac.vfrDir = { north: 0, south: 180, east: 90, west: 270 }[ac.vfrDirName]; }
         ac.intent = ac.role === 'pat' ? 'closed traffic' : `VFR departure to the ${ac.vfrDirName}`;
       }
       const d = old._early ? 0.2 : this.rng.range(3, 20);
@@ -2134,6 +2135,7 @@ const ATC = {};
         ac.holding = true;
         this.request(ac, 'inbound', `Tower, ${ac.say}, ${Math.round(d / NM)} miles out, circling, request pattern entry.`);
       }
+      if (ac.vecHdg != null) { this.airMove(ac, dt, ac.vecHdg, altT, ac.T.patSpd + 10); return; }
       let track = this.directTo(ac, this.ap.center);
       if (ac.holding) { const radial = A.vh(ac.x - this.ap.center.x, ac.y - this.ap.center.y); track = A.norm(radial - 90 - A.clamp((d - R) / 1500 * 30, -40, 40)); }
       this.airMove(ac, dt, track, altT, ac.T.patSpd + 10);
@@ -2192,6 +2194,16 @@ const ATC = {};
           if (vp <= P.off + r * 0.5 || A.dist(ac, P.e0) < r * 0.6) { P.leg = 'downwind'; P.calledMid = false; }
           break;
         }
+        case 'tomid':
+          track = this.directTo(ac, P.xm); altT = patMSL + 500;
+          if (A.dist(ac, P.xm) < r * 1.5) P.leg = 'xmid';
+          break;
+        case 'xmid':
+          // fly across the field perpendicular to the runway toward the pattern side
+          track = this.lineTrack(ac, this.toXY(P.xU, 0), toSide, 35);
+          altT = vp < P.off * 0.4 ? patMSL + 500 : patMSL;
+          if (vp >= P.off - r * 1.05) { P.leg = 'downwind'; P.calledMid = false; }
+          break;
         case 'tobase':
           track = this.directTo(ac, P.bp);
           if (A.dist(ac, P.bp) < r * 1.2) { P.leg = 'base'; P.baseU = this.fr(P.bp).u; }
@@ -2491,6 +2503,10 @@ const ATC = {};
         let k = toks[i++];
         if (/^S\d{2,3}$/.test(k)) { toks.splice(i, 0, k.slice(1)); k = 'SPD'; }
         if (/^H\d{3}$/.test(k) && !ac.onGround && ac.phase === 'climb') { ac.depHdg = +k.slice(1) % 360 || 360; push(`fly heading ${k.slice(1)}`); continue; }
+        if (/^H\d{3}$/.test(k) && !ac.onGround && ac.flight === 'VFR' && ac.pat && (ac.phase === 'inbound' || (ac.phase === 'pattern' && ['to45', '45', 'tobase', 'tofinal', 'tomid', 'xmid'].includes(ac.pat.leg)))) {
+          ac.vecHdg = +k.slice(1) % 360 || 360; ac.phase = 'inbound'; ac.holding = true; ac.req = null;
+          push(`fly heading ${k.slice(1)}`, `heading ${k.slice(1)}`); continue;
+        }
         switch (k) {
           case 'LAHSO': {
             if (!air || !['final', 'pattern', 'inbound'].includes(ac.phase)) { err = 'unable, not on approach'; break; }
@@ -2567,6 +2583,7 @@ const ATC = {};
               else if (o === 'RH') { ac.depHdg = null; instr = 'fly runway heading, '; i++; }
               else if (o === 'LCT' || o === 'MLT' || o === 'RCT' || o === 'MRT') {
                 if (ac.flight !== 'VFR') { err = 'unable closed traffic, IFR'; break; }
+                if (this.ap.noPattern) { err = `unable, no pattern work at ${this.ap.icao}`; break; }
                 ac.pat = ac.pat || this.newPattern(ac); ac.pat.sg = (o === 'LCT' || o === 'MLT') ? 1 : -1; ac.afterTO = 'pattern'; ac.role = 'pat';
                 instr = `make ${ac.pat.sg > 0 ? 'left' : 'right'} closed traffic, `; i++;
               } else if (o === 'OC') {
@@ -2686,13 +2703,19 @@ const ATC = {};
             ac.exitReq = x; push(`plan to exit at ${x}`);
             break;
           }
-          case 'ELD': case 'ERD': case 'ELB': case 'ERB': case 'SI': {
-            if (!air || !(ac.phase === 'inbound' || (ac.phase === 'pattern' && ['to45', '45', 'tobase', 'tofinal'].includes(ac.pat.leg)))) { err = 'unable'; break; }
+          case 'ELD': case 'ERD': case 'ELB': case 'ERB': case 'SI': case 'XML': case 'XMR': {
+            if (!air || !ac.pat || !(ac.phase === 'inbound' || (ac.phase === 'pattern' && ['to45', '45', 'tobase', 'tofinal', 'tomid', 'xmid'].includes(ac.pat.leg)))) { err = 'unable'; break; }
             if (toks[i] && this.endsById[toks[i]]) { ac.rwy = this.endsById[toks[i++]]; this.use(ac); rwy = ac.rwy.id; }
-            const P = ac.pat; P.sg = (k === 'ELD' || k === 'ELB') ? 1 : (k === 'SI' ? this.sideSg : -1);
+            const P = ac.pat; P.sg = (k === 'ELD' || k === 'ELB' || k === 'XML') ? 1 : (k === 'SI' ? this.sideSg : -1);
             const side = P.sg > 0 ? 'left' : 'right';
-            ac.orbit = null; ac.phase = 'pattern'; ac.req = null;
-            if (k === 'ELD' || k === 'ERD') {
+            ac.orbit = null; ac.phase = 'pattern'; ac.req = null; ac.vecHdg = null;
+            if (k === 'XML' || k === 'XMR') {
+              // cross over midfield 500 ft above pattern altitude from the non-pattern side, then turn onto downwind
+              const r = this.turnR(ac);
+              P.xU = this.L * 0.5 + r; P.xm = this.toXY(P.xU, -P.sg * (P.off + 2500));
+              P.leg = this.fr(ac).v * P.sg < -P.off * 0.5 ? 'xmid' : 'tomid';
+              push(`cross midfield, enter ${side} downwind runway ${rwy}`, `crossing midfield for ${side} downwind ${rwy}`);
+            } else if (k === 'ELD' || k === 'ERD') {
               P.e0 = this.toXY(this.L * 0.45, P.off * P.sg); P.p45 = this.toXY(this.L * 0.45 + 6000, (P.off + 6000) * P.sg);
               P.leg = 'to45'; push(`enter ${side} downwind runway ${rwy}`);
             } else if (k === 'ELB' || k === 'ERB') {
@@ -2703,6 +2726,7 @@ const ATC = {};
           }
           case 'LCT': case 'RCT': case 'MLT': case 'MRT': {
             if (ac.flight !== 'VFR') { err = 'unable, IFR'; break; }
+            if (this.ap.noPattern && (ac.onGround || ac.phase === 'climb') ) { err = `unable, no pattern work at ${this.ap.icao}`; break; }
             ac.pat = ac.pat || this.newPattern(ac);
             const sg = (k === 'LCT' || k === 'MLT') ? 1 : -1;
             const nowOk = ac.onGround || ac.phase === 'climb' || (ac.phase === 'pattern' && ac.pat.leg === 'upwind');
@@ -2798,7 +2822,7 @@ const ATC = {};
         case 'climb': if (ac.ho) return `With departure · ${String(Math.round(ac.alt / 100)).padStart(3, '0')}`; return `Departing ${ac.depHdg != null && ac.flight === 'IFR' ? 'hdg ' + A.fmtHdg(ac.depHdg) : ac.vfrDirName || 'rwy hdg'}`;
         case 'final': return `${(Math.max(0, -f.u) / NM).toFixed(1)} nm final`;
         case 'pattern': return (ac.pat.sg > 0 ? 'L ' : 'R ') + ({ upwind: 'Upwind', crosswind: 'Crosswind', downwind: 'Downwind', base: 'Base', to45: 'To 45° entry', '45': '45° entry', tobase: 'To base entry', tofinal: 'To straight-in' }[ac.pat.leg] || 'Pattern') + (ac.pat.ext ? ' (ext)' : '') + (ac.pat.follow ? ` ▸${ac.pat.follow}` : '');
-        case 'inbound': return `Inbound ${(A.dist(ac, this.ap.center) / NM).toFixed(1)} nm`;
+        case 'inbound': return ac.vecHdg != null ? `Heading ${A.fmtHdg(ac.vecHdg)} · ${(A.dist(ac, this.ap.center) / NM).toFixed(1)} nm` : `Inbound ${(A.dist(ac, this.ap.center) / NM).toFixed(1)} nm`;
         case 'rollout': return `Rollout → ${ac.exit}`;
         case 'exiting': return `Exiting ${ac.exit}`;
         case 'missed': return 'Missed approach';
@@ -4309,7 +4333,7 @@ const ATC = {};
         <div class="ps" id="pstat">${esc(s.status(ac))}</div>${ac.req ? `<div class="preq"><span id="preqw">${Math.round(s.t - ac.req.t)}s</span>“${esc(ac.req.text)}”</div>` : ''}</div>`;
       let body = '';
       const air = !ac.onGround;
-      const hdgOpts = (sel) => { let o = ''; for (let h = 10; h <= 360; h += 10) o += `<option value="${A.fmtHdg(h)}" ${h === sel ? 'selected' : ''}>${A.fmtHdg(h)}</option>`; return o; };
+      const hdgOpts = (sel) => { sel = (Math.round(A.norm(sel) / 10) * 10) || 360; let o = ''; for (let h = 10; h <= 360; h += 10) o += `<option value="${A.fmtHdg(h)}" ${h === sel ? 'selected' : ''}>${A.fmtHdg(h)}</option>`; return o; };
       this.panelHasTaxi = false;
       if (ac.onGround) {
         if (ac.phase === 'parked' && ac.gate) {
@@ -4367,13 +4391,14 @@ const ATC = {};
 
           body += sec('Departure', inner);
         }
-        if (ac.phase === 'inbound' || (ac.phase === 'pattern' && ['to45', '45', 'tobase', 'tofinal'].includes(ac.pat.leg))) {
+        if (ac.pat && (ac.phase === 'inbound' || (ac.phase === 'pattern' && ['to45', '45', 'tobase', 'tofinal', 'tomid', 'xmid'].includes(ac.pat.leg)))) {
           const RE = ac.rwy && s.endsById[ac.rwy.id] ? ac.rwy : s.vfrEnds[0];
           const L = RE.sideSg > 0;
           const choices = s.ends.length > 1 ? `<div class="row lab">Runway ${s.ends.map(E => `<button class="chip ${E === RE ? 'on' : ''}" data-entry="${E.id}">${E.id}</button>`).join('')}</div>` : '';
           body += choices;
           body += sec('Pattern entry', `<div class="row">${btn(`Enter ${L ? 'left' : 'right'} downwind`, L ? 'ELD' : 'ERD', 'go big')}${btn(`Enter ${L ? 'left' : 'right'} base`, L ? 'ELB' : 'ERB')}${btn('Straight-in', 'SI')}</div>
-            <div class="row">${btn(`Enter ${L ? 'right' : 'left'} downwind`, L ? 'ERD' : 'ELD', 'ghost')}${btn(`Enter ${L ? 'right' : 'left'} base`, L ? 'ERB' : 'ELB', 'ghost')}</div>`);
+            <div class="row">${btn(`Cross midfield · ${L ? 'left' : 'right'} downwind`, L ? 'XML' : 'XMR')}${btn(`Enter ${L ? 'right' : 'left'} downwind`, L ? 'ERD' : 'ELD', 'ghost')}${btn(`Enter ${L ? 'right' : 'left'} base`, L ? 'ERB' : 'ELB', 'ghost')}</div>
+            <div class="row lab">Fly heading <select id="hdgSel" class="csel">${hdgOpts(ac.vecHdg != null ? ac.vecHdg : ac.hdg)}</select>${btn('Fly heading', '__hdg')}</div>`);
         }
         if (ac.phase === 'final' || ac.phase === 'pattern' || ac.phase === 'inbound') {
           const exits = [...new Set((ac.rwy || s.R0).exits.map(e => e.name))];
@@ -4421,7 +4446,7 @@ const ATC = {};
       }
       if (c === '__undo') { this.tb.via.pop(); this.previewRoute(); this.renderPanel(true); return; }
       if (c === '__clear') { this.tb.via = []; this.previewRoute(); this.renderPanel(true); return; }
-      if (/^(ELD|ERD|ELB|ERB|SI)$/.test(c) && ac.rwy && s.ends.length > 1) { this.send(c + ' ' + ac.rwy.id); return; }
+      if (/^(ELD|ERD|ELB|ERB|SI|XML|XMR)$/.test(c) && ac.rwy && s.ends.length > 1) { this.send(c + ' ' + ac.rwy.id); return; }
       if (c === '__cto') { const h = ($('#hdgSel') || {}).value; this.send(h ? 'CTO H' + h : 'CTO'); return; }
       if (c === '__ctoi') { const h = ($('#hdgSel') || {}).value; this.send(h ? 'CTO IMM H' + h : 'CTO IMM'); return; }
       if (c === '__hdg') { const h = ($('#hdgSel') || {}).value; if (h) this.send('H' + h); return; }
