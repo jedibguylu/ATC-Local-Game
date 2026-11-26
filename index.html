@@ -248,7 +248,7 @@ body.mobile.mland.collapsed #app{grid-template-columns:1fr 0}
 <body>
 <div id="app">
   <header id="top">
-    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v26, Nov 24">v26</small></div>
+    <div class="brand">LOCAL&nbsp;CONTROL <span id="brandIcao">KTTR</span> <small class="ver" title="build v29, Nov 26">v29</small></div>
     <div class="clk"><canvas id="clockCv" style="width:36px;height:36px"></canvas><span id="ampm">AM</span></div>
     <div class="tk"><small>ATIS</small><b id="atis">-</b></div>
     <div class="tk"><small>Rwy</small><b id="rwyIn">27</b></div>
@@ -3261,13 +3261,49 @@ const ATC = {};
     dark() { return this.sim.wx.dark || 0; }
     pal() { return PAL.day; }
 
+    // every pair of different taxiways meeting at a node (or a taxiway bending into a lead-in) gets a turn arc
+    junctionTurns(ap) {
+      if (this._turns && this._turnsKey === ap.key) return this._turns;
+      const N = ap.nodes, out = [];
+      for (const n of Object.values(N)) {
+        if (n.rwy || n.hs || n.adj.length < 2) continue;
+        // an arm's usable length runs on along its taxiway while it stays straight, up to (not past) a hold-short line
+        const armLen = (e, u) => {
+          let prev = n, cur = N[e.to], len = A.dist(n, cur);
+          for (let k = 0; k < 6 && !cur.rwy && !cur.hs; k++) {
+            const nx = cur.adj.find(q => q.tw === e.tw && q.to !== prev.id); if (!nx) break;
+            const o = N[nx.to], l = A.dist(cur, o); if (o.rwy) break;
+            if (((o.x - cur.x) * u.x + (o.y - cur.y) * u.y) / l < 0.995) break;
+            len += o.hs ? l - 40 : l; prev = cur; cur = o; if (o.hs) break;
+          }
+          return cur.hs ? len - 40 : len;
+        };
+        const arms = n.adj.filter(e => !N[e.to].rwy && !N[e.to].hs || true).map(e => { const o = N[e.to], l = Math.max(1, A.dist(n, o)); const u = { x: (o.x - n.x) / l, y: (o.y - n.y) / l }; return { u, len: o.rwy ? 0 : Math.max(1, armLen(e, u)), tw: e.tw, lead: ap.tw[e.tw] && ap.tw[e.tw].lead }; }).filter(a => a.len > 1);
+        for (let i = 0; i < arms.length; i++) for (let j = i + 1; j < arms.length; j++) {
+          const a = arms[i], b = arms[j];
+          if (a.tw === b.tw) continue;                       // the taxiway's own bends are smoothed already
+          const cosT = a.u.x * b.u.x + a.u.y * b.u.y, th = Math.acos(A.clamp(cosT, -1, 1));
+          if (th < 0.35 || th > 2.8) continue;               // straight through, or a hairpin
+          const want = a.lead || b.lead ? 110 : 190;
+          const t = Math.min(want / Math.tan(th / 2), a.len * 0.9, b.len * 0.9), R = t * Math.tan(th / 2);
+          if (R < 30) continue;
+          const p1 = { x: n.x + a.u.x * t, y: n.y + a.u.y * t }, p2 = { x: n.x + b.u.x * t, y: n.y + b.u.y * t };
+          const bx = a.u.x + b.u.x, by = a.u.y + b.u.y, bl = Math.hypot(bx, by), dC = R / Math.sin(th / 2);
+          const c = { x: n.x + bx / bl * dC, y: n.y + by / bl * dC };
+          const a1 = Math.atan2(p1.y - c.y, p1.x - c.x), a2 = Math.atan2(p2.y - c.y, p2.x - c.x);
+          let d = a2 - a1; while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+          out.push({ n, p1, p2, c, R, a1, a2, ccw: d < 0, w: a.lead || b.lead ? 60 : 75 });
+        }
+      }
+      this._turnsKey = ap.key; return (this._turns = out);
+    }
     /* ---------- static airport layer (cached) ---------- */
     drawStatic() {
       const key = [this.W, this.H, this.view.cx.toFixed(1), this.view.cy.toFixed(1), this.view.scale.toFixed(5), this.sim.ap.key, this.sim.ends.map(e => e.id).join()].join('|');
       if (key === this.cacheKey) return;
       this.cacheKey = key;
       const cv = this.cache; cv.width = this.c.width; cv.height = this.c.height;
-      const ctx = cv.getContext('2d'); const P = this.pal(); const ap = this.sim.ap; const N = ap.nodes;
+      let ctx = cv.getContext('2d'); const P = this.pal(); const ap = this.sim.ap; const N = ap.nodes;
       const sc = this.view.scale;
       this.screenT(ctx);
       ctx.fillStyle = '#4b6236'; ctx.fillRect(0, 0, this.W, this.H);
@@ -3292,9 +3328,14 @@ const ATC = {};
         ctx.lineWidth = tw.lead ? 60 : 75;
         ctx.beginPath(); tw.nodes.forEach((n, i) => i ? ctx.lineTo(N[n].x, N[n].y) : ctx.moveTo(N[n].x, N[n].y)); ctx.stroke();
       }
-      // fillets at junctions
-      ctx.fillStyle = P.pave;
-      for (const n of Object.values(N)) if (n.tws.length > 1 && !n.rwy) { ctx.beginPath(); ctx.arc(n.x, n.y, 70, 0, Math.PI * 2); ctx.fill(); }
+      // curved fillets where taxiways meet (pavement only; the matching centerline arcs are drawn with the markings)
+      const turns = this.junctionTurns(ap);
+      ctx.fillStyle = P.pave; ctx.strokeStyle = P.pave; ctx.lineCap = 'butt';
+      for (const t of turns) {
+        ctx.beginPath(); ctx.moveTo(t.n.x, t.n.y); ctx.lineTo(t.p1.x, t.p1.y); ctx.arc(t.c.x, t.c.y, t.R, t.a1, t.a2, t.ccw); ctx.closePath(); ctx.fill();
+        ctx.lineWidth = t.w; ctx.beginPath(); ctx.arc(t.c.x, t.c.y, t.R, t.a1, t.a2, t.ccw); ctx.stroke();
+      }
+      ctx.lineCap = 'round';
       // runways, drawn in a local frame where the runway runs along +x from end "a"
       for (const R of ap.runways) {
         ctx.save(); ctx.translate(R.a.x, R.a.y); ctx.rotate(Math.atan2(R.b.y - R.a.y, R.b.x - R.a.x));
@@ -3327,6 +3368,8 @@ const ATC = {};
         const p = new A.Path(pts, th => th < 0.8 ? 700 : 120);
         ctx.beginPath(); p.pts.forEach((q, i) => i ? ctx.lineTo(q.x, q.y) : ctx.moveTo(q.x, q.y)); ctx.stroke();
       }
+      // lead-on centerline arcs at junctions
+      for (const t of turns) { ctx.beginPath(); ctx.arc(t.c.x, t.c.y, t.R, t.a1, t.a2, t.ccw); ctx.stroke(); }
       // one-way arrows (direction can flip with the runway flow)
       ctx.fillStyle = 'rgba(242,194,48,0.85)';
       if (sc > 0.045) for (const tw of Object.values(ap.tw)) {
@@ -3384,6 +3427,10 @@ const ATC = {};
         ctx.fillStyle = P.mark; ctx.font = `700 ${A.clamp(sc * 90, 7, 26)}px ui-monospace, Menlo, monospace`;
         ctx.fillText(end.id, 0, 0); ctx.restore();
       }
+      // signs go on their own layer, drawn after the darkness overlay: they're lit at night
+      const lc = this.lcache || (this.lcache = document.createElement('canvas'));
+      lc.width = this.c.width; lc.height = this.c.height;
+      { const lctx = lc.getContext('2d'); this.screenT(lctx); lctx.textAlign = 'center'; lctx.textBaseline = 'middle'; ctx = lctx; }
       ctx.font = `600 ${fs}px ui-monospace, Menlo, Consolas, monospace`;
       const sign = (text, wx, wy, bg, fg) => {
         const [sx, sy] = this.w2s(wx, wy);
@@ -3427,11 +3474,68 @@ const ATC = {};
           const a = N[tw.nodes[i - 1]], b = N[tw.nodes[i]];
           if (a.rwy || b.rwy) continue;
           const d = A.dist(a, b), ux = (b.x - a.x) / d, uy = (b.y - a.y) / d;
-          for (let s = 60; s < d - 30; s += 160) for (const sg of [-1, 1]) L.push({ x: a.x + ux * s - uy * 42 * sg, y: a.y + uy * s + ux * 42 * sg, c: 'b', k: 'twy' });
+          for (let s = 60; s < d - 30; s += 160) for (const sg of [-1, 1]) L.push({ x: a.x + ux * s - uy * 42 * sg, y: a.y + uy * s + ux * 42 * sg, c: 'b', k: 'twy', tw: tw.name });
         }
+      }
+      // no edge lights out in the middle of an intersection: drop any that sit on another taxiway's pavement,
+      // on a junction fillet, or on a runway; then line the fillets' inside edges instead
+      const segs = [];
+      for (const tw of Object.values(ap.tw)) for (let i = 1; i < tw.nodes.length; i++) segs.push({ a: N[tw.nodes[i - 1]], b: N[tw.nodes[i]], tw: tw.name, hw: tw.lead ? 30 : 37.5 });
+      const segD = (p, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l2 = dx * dx + dy * dy || 1; const t = A.clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / l2, 0, 1); return Math.hypot(p.x - a.x - dx * t, p.y - a.y - dy * t); };
+      const turns = this.junctionTurns(ap);
+      const inSpan = (t, ang) => { let d = ang - t.a1, span = t.a2 - t.a1; const norm = v => { while (v > Math.PI) v -= 2 * Math.PI; while (v < -Math.PI) v += 2 * Math.PI; return v; }; d = norm(d); span = norm(span); return span < 0 ? d <= 0.02 && d >= span - 0.02 : d >= -0.02 && d <= span + 0.02; };
+      const cr = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      const inTri = (p, a, b, c) => { const d1 = cr(p, a, b), d2 = cr(p, b, c), d3 = cr(p, c, a); return !((d1 < 0 || d2 < 0 || d3 < 0) && (d1 > 0 || d2 > 0 || d3 > 0)); };
+      // on a fillet = inside the corner wedge (junction, both tangent points) or on the curved strip itself
+      const onFillet = p => turns.some(t => { const r = Math.hypot(p.x - t.c.x, p.y - t.c.y);
+        return (inTri(p, t.n, t.p1, t.p2) && r > t.R - 4) || (Math.abs(r - t.R) < t.w / 2 + 2 && inSpan(t, Math.atan2(p.y - t.c.y, p.x - t.c.x))); });
+      const onRwy = p => ap.runways.some(R => segD(p, R.a, R.b) < 100);
+      for (let i = L.length - 1; i >= 0; i--) {
+        const l = L[i]; if (l.k !== 'twy') continue;
+        if (onRwy(l) || onFillet(l) || segs.some(g => g.tw !== l.tw && segD(l, g.a, g.b) < g.hw + 2)) L.splice(i, 1);
+      }
+      for (const t of turns) {
+        const r = t.R - 42; if (r < 40) continue;
+        let span = t.a2 - t.a1; while (span > Math.PI) span -= 2 * Math.PI; while (span < -Math.PI) span += 2 * Math.PI;
+        const n = Math.max(1, Math.round(Math.abs(span) * r / 90));
+        for (let k = 0; k <= n; k++) { const ang = t.a1 + span * k / n; const p = { x: t.c.x + Math.cos(ang) * r, y: t.c.y + Math.sin(ang) * r };
+          if (!onRwy(p) && !segs.some(g => segD(p, g.a, g.b) < g.hw - 4)) L.push({ x: p.x, y: p.y, c: 'b', k: 'twy' }); }
       }
       for (const n of Object.values(N)) if (n.hs) L.push({ x: n.x, y: n.y, c: 'a', k: 'guard' });
       this.lights = L;
+    }
+
+    // cars on the interstate and state highways: each road gets cars spaced along it in both directions
+    traffic() {
+      if (this._cars && this._carsKey === this.scn) return this._cars;
+      const roads = [];
+      let seed = 97; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+      for (const r of this.scn.roads) {
+        if (r.kind !== 'interstate' && r.kind !== 'state') continue;
+        const cum = [0]; for (let i = 1; i < r.pts.length; i++) cum.push(cum[i - 1] + A.dist(r.pts[i - 1], r.pts[i]));
+        const len = cum[cum.length - 1]; if (len < 2000) continue;
+        const hw = r.kind === 'interstate', gap = hw ? 1400 : 3800, cars = [];
+        for (const dir of [1, -1]) for (let s = rnd() * gap; s < len; s += gap * (0.5 + rnd())) {
+          const v = (hw ? 95 : 70) * (0.85 + rnd() * 0.3);      // ft/s (≈ 55–75 mph)
+          cars.push({ s0: s, v: v * dir, lane: dir * (hw ? r.w * 0.22 : r.w * 0.2), truck: hw && rnd() < 0.2, col: ['#d9dde2', '#9aa3ad', '#2f3a48', '#7a1f1f', '#1d3f6e', '#c9c2b0'][Math.floor(rnd() * 6)] });
+        }
+        roads.push({ r, cum, len, cars });
+      }
+      this._carsKey = this.scn; return (this._cars = roads);
+    }
+    carPositions(t) {
+      const out = [];
+      for (const R of this.traffic()) {
+        const { r, cum, len } = R;
+        for (const c of R.cars) {
+          let s = (c.s0 + c.v * t) % len; if (s < 0) s += len;
+          let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+          const a = r.pts[i - 1], b = r.pts[i], l = cum[i] - cum[i - 1] || 1, f = (s - cum[i - 1]) / l;
+          const ux = (b.x - a.x) / l, uy = (b.y - a.y) / l, d = Math.sign(c.v);
+          out.push({ x: a.x + (b.x - a.x) * f - uy * c.lane, y: a.y + (b.y - a.y) * f + ux * c.lane, hx: ux * d, hy: uy * d, c });
+        }
+      }
+      return out;
     }
 
     /* ---------- aircraft shapes ---------- */
@@ -3501,6 +3605,17 @@ const ATC = {};
       this.screenT(ctx);
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.drawImage(this.cache, 0, 0);
+      // highway traffic
+      const tNow = performance.now() / 1000;
+      const cars = this.carPositions(tNow).filter(p => { const [x, y] = this.w2s(p.x, p.y); p.sx = x; p.sy = y; return x > -20 && y > -20 && x < this.W + 20 && y < this.H + 20; });
+      if (this.view.scale > 0.012) {
+        this.screenT(ctx);
+        for (const p of cars) {
+          const len = Math.max(2.5, (p.c.truck ? 65 : 16) * this.view.scale), wid = Math.max(1.4, (p.c.truck ? 8.5 : 6.5) * this.view.scale);
+          ctx.save(); ctx.translate(p.sx, p.sy); ctx.rotate(Math.atan2(-p.hy, p.hx));
+          ctx.fillStyle = p.c.truck ? '#e6e3dc' : p.c.col; ctx.fillRect(-len / 2, -wid / 2, len, wid); ctx.restore();
+        }
+      }
       this.screenT(ctx);
       const P = this.pal();
       // pattern guide
@@ -3636,6 +3751,18 @@ const ATC = {};
         else if (lightsOn && ac.onGround && ac.spd > 1) { const [lx, ly] = loc(0, -L2 - 3); dot('w', lx, ly, sz * 1.2, v.lights * 0.6); }
       }
       ctx.restore();
+      // lit signs and labels (taxiway, hold-short, gates, spots) on top of the night overlay
+      if (this.lcache) { ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = wx.visFt < 0.5 * 5280 ? 0.6 : 1; ctx.drawImage(this.lcache, 0, 0); ctx.restore(); }
+      // headlights and taillights
+      if (dk > 0.3 || wx.visFt < 3 * 5280) {
+        ctx.save(); ctx.globalCompositeOperation = 'lighter';
+        const z = A.clamp(sc * 40, 1.4, 4), fa = dk > 0.3 ? A.clamp((dk - 0.3) / 0.3, 0.3, 1) : 0.5;
+        for (const p of cars) {
+          const L2 = Math.max(1.5, 9 * sc), fx = p.hx * L2, fy = -p.hy * L2;
+          dot('y', p.sx + fx, p.sy + fy, z, 0.8 * fa); dot('r', p.sx - fx, p.sy - fy, z * 0.8, 0.6 * fa);
+        }
+        ctx.restore();
+      }
       // city / farm lights at night
       if (dk > 0.3) {
         ctx.save(); ctx.globalCompositeOperation = 'lighter';
